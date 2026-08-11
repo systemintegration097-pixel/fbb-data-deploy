@@ -1,0 +1,1360 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Monitoreo FBB - Rupay</title>
+    
+    <!-- Google Fonts -->
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&family=Outfit:wght@400;500;600;700;800&display=swap" rel="stylesheet">
+    
+    <!-- FontAwesome for Icons -->
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+    
+    <!-- Leaflet.js Map CSS -->
+    <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" integrity="sha256-p4NxAoJBhIIN+hmNHrzRCf9tD/miZyoHS5obTRR9BMY=" crossorigin=""/>
+    
+    <!-- Custom CSS -->
+    <link rel="stylesheet" href="/static/css/style.css?v=5">
+</head>
+<body class="dark-theme">
+    <div class="app-container">
+        <div class="sidebar-overlay" id="sidebar-overlay"></div>
+        
+        <!-- Sidebar Navigation -->
+        <aside class="sidebar">
+            <div class="logo-area" style="display: flex; justify-content: space-between; align-items: center; width: 100%;">
+                <div style="display: flex; align-items: center; gap: 12px;">
+                    <div class="logo-icon"><i class="fa-solid fa-network-wired"></i></div>
+                    <div class="logo-text"><span>Rupay</span> FBB Monitor</div>
+                </div>
+                <button id="mobile-menu-close" class="mobile-menu-close-btn" style="display: none; background: none; border: none; color: var(--color-text-muted); font-size: 20px; cursor: pointer;"><i class="fa-solid fa-xmark"></i></button>
+            </div>
+            
+            <nav class="nav-menu">
+                <button class="nav-btn active" data-target="dashboard-section" id="nav-dashboard">
+                    <i class="fa-solid fa-chart-pie"></i> Panel de Control
+                </button>
+                <button class="nav-btn" data-target="zones-section" id="nav-zones">
+                    <i class="fa-solid fa-earth-americas"></i> Zonas Activas
+                </button>
+                <button class="nav-btn" data-target="boxes-section" id="nav-boxes">
+                    <i class="fa-solid fa-box-archive"></i> Lista de Cajas
+                </button>
+                <button class="nav-btn" data-target="staff-section" id="nav-staff">
+                    <i class="fa-solid fa-users-gear"></i> Personal (Staff)
+                </button>
+                <button class="nav-btn" data-target="partner-capacity-section" id="nav-partner-capacity">
+                    <i class="fa-solid fa-people-carry-box"></i> Capacidad Partners
+                </button>
+                <button class="nav-btn" data-target="incidents-section" id="nav-incidents">
+                    <i class="fa-solid fa-triangle-exclamation"></i> Incidentes
+                </button>
+                <button class="nav-btn" data-target="deployments-section" id="nav-deployments">
+                    <i class="fa-solid fa-screwdriver-wrench"></i> Despliegues
+                </button>
+            </nav>
+            
+            <div class="sync-widget">
+                <p class="sync-title"><i class="fa-solid fa-cloud-arrow-down"></i> Sincronizar Datos</p>
+                <p class="sync-desc">Actualiza la base de datos desde el Google Sheet original.</p>
+                <button id="sync-btn" class="btn btn-primary btn-block">
+                    <i class="fa-solid fa-rotate"></i> Sincronizar
+                </button>
+                <div id="sync-loading" class="spinner-container hidden">
+                    <div class="spinner"></div>
+                    <span class="spinner-text">Sincronizando...</span>
+                </div>
+            </div>
+            
+            <div class="sidebar-footer">
+                <span>Versión 1.0.0</span>
+            </div>
+        </aside>
+        
+        <!-- Main Content Area -->
+        <main class="main-content">
+            
+            <!-- Top Header -->
+            <header class="top-header">
+                <div style="display: flex; align-items: center; gap: 16px;">
+                    <button id="mobile-menu-toggle" class="mobile-menu-btn" style="display: none; background: rgba(255,255,255,0.05); border: 1px solid var(--border-color); color: var(--color-text-main); font-size: 18px; width: 40px; height: 40px; border-radius: 8px; cursor: pointer; align-items: center; justify-content: center;"><i class="fa-solid fa-bars"></i></button>
+                    <div class="header-title">
+                        <h1 id="section-title">Panel de Control</h1>
+                        <p id="section-subtitle">Visualización general de la red de banda ancha fija.</p>
+                    </div>
+                </div>
+                <div class="user-profile">
+                    <div class="status-indicator online"></div>
+                    <span>Rupay DB Admin</span>
+                    <i class="fa-solid fa-chevron-down"></i>
+                </div>
+            </header>
+            
+            <!-- SECTIONS CONTAINER -->
+            <div class="content-wrapper">
+                
+                <!-- 1. DASHBOARD SECTION -->
+                <section id="dashboard-section" class="content-section active">
+                    <!-- KPI Cards Grid -->
+                    <div class="kpi-grid">
+                        <div class="kpi-card">
+                            <div class="kpi-icon"><i class="fa-solid fa-earth-americas"></i></div>
+                            <div class="kpi-info">
+                                <span class="kpi-label">Total Zonas</span>
+                                <h3 id="stat-total-zones" class="kpi-value">-</h3>
+                            </div>
+                        </div>
+                        <div class="kpi-card">
+                            <div class="kpi-icon"><i class="fa-solid fa-box"></i></div>
+                            <div class="kpi-info">
+                                <span class="kpi-label">Total Puertos</span>
+                                <h3 id="stat-total-ports" class="kpi-value">-</h3>
+                            </div>
+                        </div>
+                        <div class="kpi-card">
+                            <div class="kpi-icon text-success"><i class="fa-solid fa-users"></i></div>
+                            <div class="kpi-info">
+                                <span class="kpi-label">Clientes Activos</span>
+                                <h3 id="stat-active-cust" class="kpi-value">-</h3>
+                            </div>
+                        </div>
+                        <div class="kpi-card">
+                            <div class="kpi-icon text-warning"><i class="fa-solid fa-user-slash"></i></div>
+                            <div class="kpi-info">
+                                <span class="kpi-label">Clientes Suspendidos</span>
+                                <h3 id="stat-susp-cust" class="kpi-value">-</h3>
+                            </div>
+                        </div>
+                        <div class="kpi-card">
+                            <div class="kpi-icon text-danger"><i class="fa-solid fa-user-xmark"></i></div>
+                            <div class="kpi-info">
+                                <span class="kpi-label">Clientes Cancelados</span>
+                                <h3 id="stat-canc-cust" class="kpi-value">-</h3>
+                            </div>
+                        </div>
+                        <div class="kpi-card">
+                            <div class="kpi-icon text-info"><i class="fa-solid fa-gauge-high"></i></div>
+                            <div class="kpi-info">
+                                <span class="kpi-label">Saturación Promedio</span>
+                                <h3 id="stat-avg-sat" class="kpi-value">-</h3>
+                            </div>
+                        </div>
+                    </div>
+                    
+                    <!-- Charts & Insights Grid -->
+                    <div class="dashboard-grid">
+                        <div class="grid-item card chart-card">
+                            <div class="card-header">
+                                <h3><i class="fa-solid fa-chart-column"></i> Capacidad y Saturación por Sucursal</h3>
+                            </div>
+                            <div class="card-body">
+                                <div class="chart-container">
+                                    <canvas id="chart-branch-saturation"></canvas>
+                                </div>
+                            </div>
+                        </div>
+                        
+                        <div class="grid-item card chart-card">
+                            <div class="card-header" style="display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 8px; padding-top: 10px; padding-bottom: 10px;">
+                                <h3><i class="fa-solid fa-chart-column"></i> Cantidad de Clientes por Estado</h3>
+                                <div class="chart-filters" style="display: flex; gap: 8px;">
+                                    <select id="ratio-filter-branch" class="form-control form-control-xs" style="width: 100px; background-color: rgba(255,255,255,0.02); padding: 4px 8px; font-size: 11px; height: auto; border: 1px solid var(--border-color);">
+                                        <option value="">Sucursal</option>
+                                    </select>
+                                    <select id="ratio-filter-zone" class="form-control form-control-xs" style="width: 120px; background-color: rgba(255,255,255,0.02); padding: 4px 8px; font-size: 11px; height: auto; border: 1px solid var(--border-color);" disabled>
+                                        <option value="">Zona</option>
+                                    </select>
+                                </div>
+                            </div>
+                            <div class="card-body">
+                                <div class="chart-container">
+                                    <canvas id="chart-customer-ratio"></canvas>
+                                </div>
+                            </div>
+                        </div>
+                        
+                        <div class="grid-item card chart-card" style="grid-column: span 2;">
+                            <div class="card-header" style="display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 8px; padding-top: 10px; padding-bottom: 10px;">
+                                <h3><i class="fa-solid fa-chart-column"></i> Evolución de Puertos por Sucursal (100% Stacked)</h3>
+                                <div class="chart-filters" style="display: flex; gap: 8px;">
+                                    <select id="stacked-filter-branch" class="form-control form-control-xs" style="width: 100px; background-color: rgba(255,255,255,0.02); padding: 4px 8px; font-size: 11px; height: auto; border: 1px solid var(--border-color);">
+                                        <option value="">Sucursal</option>
+                                    </select>
+                                    <select id="stacked-filter-partner" class="form-control form-control-xs" style="width: 100px; background-color: rgba(255,255,255,0.02); padding: 4px 8px; font-size: 11px; height: auto; border: 1px solid var(--border-color);">
+                                        <option value="">Partner</option>
+                                    </select>
+                                </div>
+                            </div>
+                            <div class="card-body">
+                                <div class="chart-container">
+                                    <canvas id="chart-branch-capacity-stacked"></canvas>
+                                </div>
+                        </div>
+                        
+                        <!-- Relación de Saturación y Cancelación por Sucursal -->
+                        <div class="grid-item card chart-card" style="grid-column: span 2;">
+                            <div class="card-header">
+                                <h3><i class="fa-solid fa-chart-line"></i> Relación de Saturación de Puertos y Cancelación por Sucursal</h3>
+                            </div>
+                            <div class="card-body">
+                                <div class="chart-container">
+                                    <canvas id="chart-branch-sat-cancel-ratio"></canvas>
+                                </div>
+                            </div>
+                        </div>
+                        <div class="grid-item card table-card">
+                            <div class="card-header">
+                                <h3><i class="fa-solid fa-triangle-exclamation text-danger"></i> Zonas Más Saturadas</h3>
+                            </div>
+                            <div class="card-body">
+                                <div class="table-responsive">
+                                    <table class="table">
+                                        <thead>
+                                            <tr>
+                                                <th>Zona</th>
+                                                <th>Sucursal</th>
+                                                <th>Saturación</th>
+                                                <th>Clientes Activos</th>
+                                                <th>Servicio</th>
+                                            </tr>
+                                        </thead>
+                                        <tbody id="critical-zones-table">
+                                            <!-- Dynamically filled -->
+                                        </tbody>
+                                    </table>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </section>
+                
+                <!-- 2. ZONES SECTION -->
+                <section id="zones-section" class="content-section">
+                    <div class="card filter-card">
+                        <div class="filter-header">
+                            <h3><i class="fa-solid fa-sliders"></i> Filtros de Búsqueda</h3>
+                            <button id="add-zone-btn" class="btn btn-success"><i class="fa-solid fa-plus"></i> Nueva Zona</button>
+                        </div>
+                        <div class="filter-grid">
+                            <div class="form-group">
+                                <label for="zone-filter-search">Buscar</label>
+                                <div class="input-icon-wrapper">
+                                    <i class="fa-solid fa-magnifying-glass"></i>
+                                    <input type="text" id="zone-filter-search" placeholder="Zona, OLT, Site..." class="form-control">
+                                </div>
+                            </div>
+                            <div class="form-group">
+                                <label for="zone-filter-branch">Sucursal (Branch)</label>
+                                <select id="zone-filter-branch" class="form-control">
+                                    <option value="">Todas</option>
+                                    <!-- Options filled dynamically -->
+                                </select>
+                            </div>
+                            <div class="form-group">
+                                <label for="zone-filter-dept">Departamento</label>
+                                <select id="zone-filter-dept" class="form-control">
+                                    <option value="">Todos</option>
+                                    <!-- Options filled dynamically -->
+                                </select>
+                            </div>
+                        </div>
+                    </div>
+                    
+                    <div class="card table-card mt-4">
+                        <div class="card-header">
+                            <h3><i class="fa-solid fa-list"></i> Zonas Registradas</h3>
+                            <div class="pagination-info" id="zones-pagination-info">Mostrando - de - registros</div>
+                        </div>
+                        <div class="card-body">
+                            <div class="table-responsive">
+                                <table class="table table-hover">
+                                    <thead>
+                                        <tr>
+                                            <th class="sortable" data-col="zone">Zona <i class="fa-solid fa-sort"></i></th>
+                                            <th class="sortable" data-col="branch">Sucursal <i class="fa-solid fa-sort"></i></th>
+                                            <th class="sortable" data-col="saturation">% Sat. Puertos <i class="fa-solid fa-sort"></i></th>
+                                            <th class="sortable" data-col="percent_saturation">% Sat. Clientes <i class="fa-solid fa-sort"></i></th>
+                                            <th class="sortable" data-col="percent_cancel">% Cancelación <i class="fa-solid fa-sort"></i></th>
+                                            <th class="sortable" data-col="active_customers">Clientes <i class="fa-solid fa-sort"></i></th>
+                                            <th>Site Físico</th>
+                                            <th>OLT</th>
+                                            <th>Cajas</th>
+                                            <th class="sortable" data-col="status_service">Estado <i class="fa-solid fa-sort"></i></th>
+                                            <th>Acciones</th>
+                                        </tr>
+                                    </thead>
+                                    <tbody id="zones-table-body">
+                                        <!-- Dynamically filled -->
+                                    </tbody>
+                                </table>
+                            </div>
+                            
+                            <!-- Pagination Controls -->
+                            <div class="pagination-container" id="zones-pagination">
+                                <!-- Filled by JS -->
+                            </div>
+                        </div>
+                    </div>
+                </section>
+                
+                <!-- 3. BOXES SECTION -->
+                <section id="boxes-section" class="content-section">
+                    <div class="card filter-card">
+                        <div class="filter-header">
+                            <h3><i class="fa-solid fa-sliders"></i> Filtros de Búsqueda</h3>
+                            <button id="add-box-btn" class="btn btn-success"><i class="fa-solid fa-plus"></i> Nueva Caja</button>
+                        </div>
+                        <div class="filter-grid">
+                            <div class="form-group">
+                                <label for="box-filter-search">Buscar</label>
+                                <div class="input-icon-wrapper">
+                                    <i class="fa-solid fa-magnifying-glass"></i>
+                                    <input type="text" id="box-filter-search" placeholder="Código de Nodo, Dirección..." class="form-control">
+                                </div>
+                            </div>
+                            <div class="form-group">
+                                <label for="box-filter-branch">Sucursal (Branch)</label>
+                                <select id="box-filter-branch" class="form-control">
+                                    <option value="">Todas</option>
+                                    <!-- Options filled dynamically -->
+                                </select>
+                            </div>
+                            <div class="form-group">
+                                <label for="box-filter-class">Clase de Caja</label>
+                                <select id="box-filter-class" class="form-control">
+                                    <option value="">Todas</option>
+                                    <!-- Options filled dynamically -->
+                                </select>
+                            </div>
+                            <div class="form-group">
+                                <label for="box-filter-zone">Zona</label>
+                                <input type="text" id="box-filter-zone" placeholder="Ej: ARE_Z01" class="form-control" list="box-zone-list" autocomplete="off">
+                                <datalist id="box-zone-list"></datalist>
+                            </div>
+                            <div class="form-group">
+                                <label for="box-filter-site">SITE</label>
+                                <input type="text" id="box-filter-site" placeholder="Ej: SITE_123" class="form-control" list="box-site-list" autocomplete="off">
+                                <datalist id="box-site-list"></datalist>
+                            </div>
+                        </div>
+                    </div>
+                    
+                    <div class="boxes-layout mt-4">
+                        <!-- Left Table column -->
+                        <div class="card table-card boxes-table-container">
+                            <div class="card-header">
+                                <h3><i class="fa-solid fa-box"></i> Cajas</h3>
+                                <div class="pagination-info" id="boxes-pagination-info">Mostrando - de - registros</div>
+                            </div>
+                            <div class="card-body">
+                                <div class="table-responsive">
+                                    <table class="table table-hover table-sm">
+                                        <thead>
+                                            <tr>
+                                                <th class="sortable" data-col="node_code">Cod. Nodo <i class="fa-solid fa-sort"></i></th>
+                                                <th class="sortable" data-col="zone">Zona <i class="fa-solid fa-sort"></i></th>
+                                                <th class="sortable" data-col="branch">Sucursal <i class="fa-solid fa-sort"></i></th>
+                                                <th class="sortable" data-col="site_logical">SITE <i class="fa-solid fa-sort"></i></th>
+                                                <th>Clase</th>
+                                                <th class="sortable" data-col="status_service">Estado <i class="fa-solid fa-sort"></i></th>
+                                                <th>Puertos Usados</th>
+                                                <th>Acciones</th>
+                                            </tr>
+                                        </thead>
+                                        <tbody id="boxes-table-body">
+                                            <!-- Dynamically filled -->
+                                        </tbody>
+                                    </table>
+                                </div>
+                                <div class="pagination-container" id="boxes-pagination">
+                                    <!-- Filled by JS -->
+                                </div>
+                            </div>
+                        </div>
+                        
+                        <!-- Right Map column -->
+                        <div class="card map-card">
+                            <div class="card-header">
+                                <h3><i class="fa-solid fa-map-location-dot"></i> Ubicación en Mapa (Leaflet)</h3>
+                                <div style="display: flex; gap: 8px;">
+                                    <button id="reset-map-btn" class="btn btn-secondary btn-xs"><i class="fa-solid fa-arrows-to-eye"></i> Centrar</button>
+                                    <button id="toggle-fullscreen-map-btn" class="btn btn-secondary btn-xs"><i class="fa-solid fa-expand"></i> Maximizar</button>
+                                </div>
+                            </div>
+                            <div class="card-body map-body">
+                                <div id="map"></div>
+                                <div id="map-fallback" class="map-placeholder">
+                                    <i class="fa-solid fa-map-location-dot fa-3x"></i>
+                                    <p class="mt-2">Selecciona una caja con coordenadas para ver su ubicación en el mapa.</p>
+                                </div>
+                            </div>
+                            <div class="map-controls-bar">
+                                <!-- Layer & Measure Toggles -->
+                                <div class="map-control-group">
+                                    <label class="toggle-label" style="cursor: pointer; display: inline-flex; align-items: center; gap: 6px; font-size: 13px; font-weight: 500; color: var(--color-text-main);">
+                                        <input type="checkbox" id="kml-toggle-checkbox" style="cursor: pointer;">
+                                        <span><i class="fa-solid fa-layer-group text-info"></i> Cobertura KML</span>
+                                    </label>
+                                    <label class="toggle-label" style="cursor: pointer; display: inline-flex; align-items: center; gap: 6px; font-size: 13px; font-weight: 500; color: var(--color-text-main); margin-left: 10px;">
+                                        <input type="checkbox" id="show-names-checkbox" style="cursor: pointer;">
+                                        <span><i class="fa-solid fa-tag text-warning"></i> Nombres en Mapa</span>
+                                    </label>
+                                    <button id="measure-tool-btn" class="btn btn-secondary btn-xs" style="margin-left: 10px;"><i class="fa-solid fa-ruler"></i> Medir Distancia</button>
+                                    <button id="measure-clear-btn" class="btn btn-danger btn-xs hidden"><i class="fa-solid fa-trash-can"></i> Limpiar</button>
+                                    <span id="measure-result" class="measure-text" style="font-size: 12px; font-weight: 600; color: var(--color-warning); margin-left: 8px;"></span>
+                                </div>
+                                <!-- Coordinates and Nearest Search -->
+                                <div class="map-control-group coordinates-search-group" style="display: flex; align-items: center; gap: 8px; margin-left: auto;">
+                                    <input type="text" id="manual-coordinates" placeholder="Lat, Lng (ej. -11.979557, -76.942322)" class="form-control form-control-xs" style="width: 240px; padding: 6px 10px; font-size: 12px; background-color: rgba(255,255,255,0.02);">
+                                    <button id="map-capture-btn" class="btn btn-secondary btn-xs" title="Capturar coordenadas haciendo clic en el mapa"><i class="fa-solid fa-crosshairs"></i> Capturar</button>
+                                    <button id="search-nearest-btn" class="btn btn-primary btn-xs"><i class="fa-solid fa-location-crosshairs"></i> Buscar 12 Cercanas</button>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </section>
+                
+                <!-- 4. STAFF SECTION -->
+                <section id="staff-section" class="content-section">
+                    <div class="card filter-card">
+                        <div class="filter-header">
+                            <h3><i class="fa-solid fa-sliders"></i> Filtros de Búsqueda</h3>
+                            <div class="filter-header-buttons" style="display: flex; gap: 8px;">
+                                <button id="add-staff-btn" class="btn btn-success"><i class="fa-solid fa-plus"></i> Nuevo Personal</button>
+                                <button id="staff-export-btn" class="btn btn-info"><i class="fa-solid fa-download"></i> Descargar Plantilla</button>
+                                <button id="staff-import-btn" class="btn btn-secondary"><i class="fa-solid fa-upload"></i> Importar Datos</button>
+                                <input type="file" id="staff-import-file" accept=".csv" style="display: none;">
+                            </div>
+                        </div>
+                        <div class="filter-grid">
+                            <div class="form-group">
+                                <label for="staff-filter-search">Buscar</label>
+                                <div class="input-icon-wrapper">
+                                    <i class="fa-solid fa-magnifying-glass"></i>
+                                    <input type="text" id="staff-filter-search" placeholder="Nombre, OLT, Zona..." class="form-control">
+                                </div>
+                            </div>
+                            <div class="form-group">
+                                <label for="staff-filter-branch">Sucursal (Branch)</label>
+                                <select id="staff-filter-branch" class="form-control">
+                                    <option value="">Todas</option>
+                                </select>
+                            </div>
+                            <div class="form-group">
+                                <label for="staff-filter-partner">Socio (Partner)</label>
+                                <select id="staff-filter-partner" class="form-control">
+                                    <option value="">Todos</option>
+                                </select>
+                            </div>
+                        </div>
+                    </div>
+                    
+                    <div class="card table-card mt-4">
+                        <div class="card-header">
+                            <h3><i class="fa-solid fa-users-gear"></i> Asignaciones de Personal</h3>
+                            <div class="pagination-info" id="staff-pagination-info">Mostrando - de - registros</div>
+                        </div>
+                        <div class="card-body">
+                            <div class="table-responsive">
+                                <table class="table table-hover">
+                                    <thead>
+                                        <tr>
+                                            <th class="sortable" data-col="staff_team">Equipo Staff <i class="fa-solid fa-sort"></i></th>
+                                            <th class="sortable" data-col="zone">Zona <i class="fa-solid fa-sort"></i></th>
+                                            <th class="sortable" data-col="branch">Sucursal <i class="fa-solid fa-sort"></i></th>
+                                            <th class="sortable" data-col="partner">Socio / Partner <i class="fa-solid fa-sort"></i></th>
+                                            <th class="sortable" data-col="vtp_username">Usuario VTP <i class="fa-solid fa-sort"></i></th>
+                                            <th class="sortable" data-col="olt">OLT <i class="fa-solid fa-sort"></i></th>
+                                            <th class="sortable" data-col="partner_incidence">Socio Incidencia <i class="fa-solid fa-sort"></i></th>
+                                            <th>Acciones</th>
+                                        </tr>
+                                    </thead>
+                                    <tbody id="staff-table-body">
+                                        <!-- Dynamically filled -->
+                                    </tbody>
+                                </table>
+                            </div>
+                            
+                            <!-- Pagination Controls -->
+                            <div class="pagination-container" id="staff-pagination">
+                                <!-- Filled by JS -->
+                            </div>
+                        </div>
+                    </div>
+                </section>
+                
+                <!-- 5. PARTNER CAPACITY SECTION -->
+                <section id="partner-capacity-section" class="content-section">
+                    <!-- Table 1: Consolidated Partner Capacity by Branch -->
+                    <div class="card table-card">
+                        <div class="card-header">
+                            <h3><i class="fa-solid fa-people-carry-box"></i> Resumen de Capacidad por Socio y Sucursal</h3>
+                        </div>
+                        <div class="card-body">
+                            <div class="table-responsive">
+                                <table class="table table-hover">
+                                    <thead>
+                                        <tr>
+                                            <th>Sucursal</th>
+                                            <th>Socio / Partner</th>
+                                            <th>OLTs Atendidas</th>
+                                            <th>Clientes Activos</th>
+                                            <th>Equipos Totales</th>
+                                            <th>Personal (FT)</th>
+                                            <th>Equipos Despliegue</th>
+                                            <th>Equipos Incidencias</th>
+                                            <th>Equipos ODN</th>
+                                            <th>Sat. Promedio</th>
+                                        </tr>
+                                    </thead>
+                                    <tbody id="partner-capacity-table-body">
+                                        <!-- Dynamically filled -->
+                                    </tbody>
+                                </table>
+                            </div>
+                        </div>
+                    </div>
+                    
+                    <!-- Table 2: Detailed Zone Load & Ratios -->
+                    <div class="card table-card mt-4">
+                        <div class="card-header">
+                            <h3><i class="fa-solid fa-chart-line"></i> Análisis de Carga por Zona (Despliegue)</h3>
+                        </div>
+                        <div class="card-body">
+                            <div class="table-responsive">
+                                <table class="table table-hover">
+                                    <thead>
+                                        <tr>
+                                            <th>Zona</th>
+                                            <th>Sucursal</th>
+                                            <th>Clientes Activos</th>
+                                            <th>% Sat. Puertos</th>
+                                            <th>% Sat. Clientes</th>
+                                            <th>% Cancelación</th>
+                                            <th>Socio Despliegue</th>
+                                            <th>Equipos Despliegue</th>
+                                            <th>Clientes / Equipo</th>
+                                            <th>Estado Carga</th>
+                                        </tr>
+                                    </thead>
+                                    <tbody id="zone-capacity-table-body">
+                                        <!-- Dynamically filled -->
+                                    </tbody>
+                                </table>
+                            </div>
+                        </div>
+                    </div>
+                </section>
+                
+                <!-- 6. INCIDENTS SECTION -->
+                <section id="incidents-section" class="content-section">
+                    <div class="card filter-card">
+                        <div class="filter-header">
+                            <h3><i class="fa-solid fa-sliders"></i> Filtros de Incidentes</h3>
+                        </div>
+                        <div class="filter-grid" style="grid-template-columns: repeat(4, 1fr); gap: 16px;">
+                            <div class="form-group">
+                                <label for="incidents-filter-branch">Sucursal (Branch)</label>
+                                <select id="incidents-filter-branch" class="form-control">
+                                    <option value="">Todas</option>
+                                    <!-- Options filled dynamically -->
+                                </select>
+                            </div>
+                            <div class="form-group">
+                                <label for="incidents-filter-month">Mes / Año</label>
+                                <select id="incidents-filter-month" class="form-control">
+                                    <option value="">Todos los meses</option>
+                                    <!-- Options filled dynamically -->
+                                </select>
+                            </div>
+                            <div class="form-group">
+                                <label for="incidents-filter-week">Semana</label>
+                                <select id="incidents-filter-week" class="form-control">
+                                    <option value="">Todas las semanas</option>
+                                    <!-- Options filled dynamically -->
+                                </select>
+                            </div>
+                            <div class="form-group">
+                                <label for="incidents-filter-site">Estación / Site</label>
+                                <select id="incidents-filter-site" class="form-control">
+                                    <option value="">Todos los Sites</option>
+                                    <!-- Options filled dynamically -->
+                                </select>
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- KPI Cards Grid -->
+                    <div class="kpi-grid mt-4">
+                        <div class="kpi-card">
+                            <div class="kpi-icon text-danger"><i class="fa-solid fa-triangle-exclamation"></i></div>
+                            <div class="kpi-info">
+                                <span class="kpi-label">Total Incidentes</span>
+                                <h3 id="incidents-stat-total" class="kpi-value">-</h3>
+                            </div>
+                        </div>
+                        <div class="kpi-card">
+                            <div class="kpi-icon text-warning"><i class="fa-solid fa-users-line"></i></div>
+                            <div class="kpi-info">
+                                <span class="kpi-label">Clientes Afectados</span>
+                                <h3 id="incidents-stat-clients" class="kpi-value">-</h3>
+                            </div>
+                        </div>
+                        <div class="kpi-card">
+                            <div class="kpi-icon text-info"><i class="fa-solid fa-circle-info"></i></div>
+                            <div class="kpi-info">
+                                <span class="kpi-label">Avería Más Frecuente</span>
+                                <h3 id="incidents-stat-frequent" class="kpi-value" style="font-size: 16px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; max-width: 200px;">-</h3>
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- Dashboard Grid for charts & tables -->
+                    <div class="dashboard-grid mt-4">
+                        <!-- Chart 1: Failure types comparison (non-stacked horizontal) -->
+                        <div class="grid-item card chart-card" style="grid-column: span 2;">
+                            <div class="card-header">
+                                <h3><i class="fa-solid fa-chart-bar"></i> Comparación de Tipos de Avería (Filtro Activo)</h3>
+                            </div>
+                            <div class="card-body">
+                                <div class="chart-container" style="height: 450px;">
+                                    <canvas id="chart-incidents-types-comparison"></canvas>
+                                </div>
+                            </div>
+                        </div>
+
+                        <!-- Chart 2: Site failure types horizontal stacked -->
+                        <div class="grid-item card chart-card" style="grid-column: span 2;">
+                            <div class="card-header">
+                                <h3><i class="fa-solid fa-chart-bar"></i> Distribución de Averías por Site (Top 10 Sites)</h3>
+                            </div>
+                            <div class="card-body">
+                                <div class="chart-container" style="height: 450px;">
+                                    <canvas id="chart-incidents-site"></canvas>
+                                </div>
+                            </div>
+                        </div>
+
+                        <!-- Failure Types Table -->
+                        <div class="grid-item card table-card">
+                            <div class="card-header">
+                                <h3><i class="fa-solid fa-bug"></i> Tipos de Averías (Recurrentes)</h3>
+                            </div>
+                            <div class="card-body">
+                                <div class="table-responsive">
+                                    <table class="table">
+                                        <thead>
+                                            <tr>
+                                                <th>Tipo de Avería</th>
+                                                <th>Cantidad</th>
+                                                <th>Porcentaje</th>
+                                            </tr>
+                                        </thead>
+                                        <tbody id="incidents-types-table-body">
+                                            <!-- Dynamically filled -->
+                                        </tbody>
+                                    </table>
+                                </div>
+                            </div>
+                        </div>
+
+                        <!-- Sites Ranking Table -->
+                        <div class="grid-item card table-card">
+                            <div class="card-header">
+                                <h3><i class="fa-solid fa-ranking-star"></i> Top 15 Sites con Más Incidencias</h3>
+                            </div>
+                            <div class="card-body">
+                                <div class="table-responsive">
+                                    <table class="table">
+                                        <thead>
+                                            <tr>
+                                                <th>Site</th>
+                                                <th>Total Incidentes</th>
+                                                <th>Clientes Afectados</th>
+                                            </tr>
+                                        </thead>
+                                        <tbody id="incidents-ranking-table-body">
+                                            <!-- Dynamically filled -->
+                                        </tbody>
+                                    </table>
+                                </div>
+                            </div>
+                        </div>
+                    <!-- New Section: Outages & Cancellations Correlation Report -->
+                    <div style="grid-column: span 2; border-top: 1px solid var(--border-color); margin-top: 32px; padding-top: 24px; width: 100%;">
+                        <h2 style="font-family: var(--font-title); font-size: 20px; font-weight: 700; color: var(--color-primary); margin-bottom: 8px;">
+                            <i class="fa-solid fa-network-wired text-danger"></i> Reporte de Cortes Físicos por Site (FTTH)
+                        </h2>
+                        <p style="color: var(--color-text-muted); font-size: 13px; margin-bottom: 24px;">
+                            Análisis correlativo entre cortes de energía por site, cortes de ODN (puertos de la OLT caídos) y llamadas de reclamo de clientes (WOs).
+                        </p>
+                    </div>
+
+                    <!-- Outages KPIs -->
+                    <div class="kpi-grid" style="width: 100%; grid-column: span 2;">
+                        <div class="kpi-card">
+                            <div class="kpi-icon text-danger"><i class="fa-solid fa-bolt-lightning"></i></div>
+                            <div class="kpi-info">
+                                <span class="kpi-label">Cortes de Energía</span>
+                                <h3 id="outages-stat-energy-cuts" class="kpi-value">-</h3>
+                            </div>
+                        </div>
+                        <div class="kpi-card">
+                            <div class="kpi-icon text-danger" style="opacity: 0.8;"><i class="fa-solid fa-plug-circle-xmark"></i></div>
+                            <div class="kpi-info">
+                                <span class="kpi-label">Afectados Energía</span>
+                                <h3 id="outages-stat-energy-affected" class="kpi-value">-</h3>
+                            </div>
+                        </div>
+                        <div class="kpi-card">
+                            <div class="kpi-icon text-warning"><i class="fa-solid fa-signal"></i></div>
+                            <div class="kpi-info">
+                                <span class="kpi-label">Cortes ODN / Fibra</span>
+                                <h3 id="outages-stat-odn-cuts" class="kpi-value">-</h3>
+                            </div>
+                        </div>
+                        <div class="kpi-card">
+                            <div class="kpi-icon text-warning" style="opacity: 0.8;"><i class="fa-solid fa-house-laptop"></i></div>
+                            <div class="kpi-info">
+                                <span class="kpi-label">Afectados ODN / Fibra</span>
+                                <h3 id="outages-stat-odn-affected" class="kpi-value">-</h3>
+                            </div>
+                        </div>
+                        <div class="kpi-card">
+                            <div class="kpi-icon text-info"><i class="fa-solid fa-headset"></i></div>
+                            <div class="kpi-info">
+                                <span class="kpi-label">Averías con WO</span>
+                                <h3 id="outages-stat-wos" class="kpi-value">-</h3>
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- Outages Graphs Grid -->
+                    <div class="dashboard-grid mt-4" style="width: 100%; grid-column: span 2;">
+                        <!-- Chart 1: Outages vs Calls -->
+                        <div class="grid-item card chart-card" style="grid-column: span 2;">
+                            <div class="card-header">
+                                <h3><i class="fa-solid fa-chart-bar"></i> Comparación Cortes Energía vs Cortes ODN vs WOs por Site (Top Sites)</h3>
+                            </div>
+                            <div class="card-body">
+                                <div class="chart-container" style="height: 340px;">
+                                    <canvas id="chart-outages-cancellations-comparison"></canvas>
+                                </div>
+                            </div>
+                        </div>
+
+                        <!-- Chart 2: Outage Causes breakdown -->
+                        <div class="grid-item card chart-card" style="grid-column: span 2;">
+                            <div class="card-header">
+                                <h3><i class="fa-solid fa-circle-exclamation"></i> Causas de Caídas Físicas (Clientes Afectados)</h3>
+                            </div>
+                            <div class="card-body">
+                                <div class="chart-container" style="height: 340px;">
+                                    <canvas id="chart-outage-causes"></canvas>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- Detailed Table -->
+                    <div class="grid-item card table-card mt-4" style="width: 100%; grid-column: span 2;">
+                        <div class="card-header" style="display: flex; justify-content: space-between; align-items: center;">
+                            <h3><i class="fa-solid fa-table"></i> Detalle de Estabilidad de Cortes Físicos por Site</h3>
+                            <span class="pagination-info" style="font-size: 12px; color: var(--color-text-muted);">Haga clic en los encabezados para ordenar</span>
+                        </div>
+                        <div class="card-body">
+                            <div class="table-responsive">
+                                <table class="table table-hover" id="outages-detailed-table">
+                                    <thead>
+                                        <tr>
+                                            <th style="cursor: pointer;" onclick="sortOutagesTable('site')">Site <i class="fa-solid fa-sort"></i></th>
+                                            <th style="cursor: pointer;" onclick="sortOutagesTable('branch')">Sucursal <i class="fa-solid fa-sort"></i></th>
+                                            <th style="cursor: pointer;" onclick="sortOutagesTable('month_year')">Mes <i class="fa-solid fa-sort"></i></th>
+                                            <th style="cursor: pointer;" onclick="sortOutagesTable('energy_cuts')">Cortes Energía <i class="fa-solid fa-sort"></i></th>
+                                            <th style="cursor: pointer;" onclick="sortOutagesTable('energy_affected')">Afectados Energía <i class="fa-solid fa-sort"></i></th>
+                                            <th style="cursor: pointer;" onclick="sortOutagesTable('odn_cuts')">Cortes ODN <i class="fa-solid fa-sort"></i></th>
+                                            <th style="cursor: pointer;" onclick="sortOutagesTable('odn_affected')">Afectados ODN <i class="fa-solid fa-sort"></i></th>
+                                            <th style="cursor: pointer;" onclick="sortOutagesTable('total_wos')">WOs (Reclamos) <i class="fa-solid fa-sort"></i></th>
+                                        </tr>
+                                    </thead>
+                                    <tbody id="outages-table-body">
+                                        <!-- Dynamically filled -->
+                                    </tbody>
+                                </table>
+                            </div>
+                        </div>
+                    </div>
+                </section>
+                
+                <!-- SECTION 7: DEPLOYMENTS & SLA ANALYTICS -->
+                <section id="deployments-section" class="content-section">
+                    <div class="card filter-card">
+                        <div class="filter-header">
+                            <h3><i class="fa-solid fa-sliders"></i> Filtros de Despliegues</h3>
+                        </div>
+                        <div class="filter-grid" style="grid-template-columns: repeat(2, 1fr); gap: 16px;">
+                            <div class="form-group">
+                                <label for="deployments-filter-branch">Sucursal (Branch)</label>
+                                <select id="deployments-filter-branch" class="form-control">
+                                    <option value="">Todas</option>
+                                    <!-- Options filled dynamically -->
+                                </select>
+                            </div>
+                            <div class="form-group">
+                                <label for="deployments-filter-month">Mes / Año</label>
+                                <select id="deployments-filter-month" class="form-control">
+                                    <option value="">Todos los meses</option>
+                                    <!-- Options filled dynamically -->
+                                </select>
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- Operational Capacity & SLA KPIs -->
+                    <div class="kpi-grid mt-4" style="width: 100%;">
+                        <div class="kpi-card">
+                            <div class="kpi-icon text-primary"><i class="fa-solid fa-truck-fast"></i></div>
+                            <div class="kpi-info">
+                                <span class="kpi-label">Tareas de Despliegue</span>
+                                <h3 id="deployments-stat-total" class="kpi-value">-</h3>
+                            </div>
+                        </div>
+                        <div class="kpi-card">
+                            <div class="kpi-icon text-success"><i class="fa-solid fa-clock"></i></div>
+                            <div class="kpi-info">
+                                <span class="kpi-label">Eficiencia SLA (<24H)</span>
+                                <h3 id="deployments-stat-sla24" class="kpi-value">-</h3>
+                            </div>
+                        </div>
+                        <div class="kpi-card">
+                            <div class="kpi-icon text-warning"><i class="fa-solid fa-people-group"></i></div>
+                            <div class="kpi-info">
+                                <span class="kpi-label">Equipos de Despliegue</span>
+                                <h3 id="deployments-stat-teams" class="kpi-value">-</h3>
+                            </div>
+                        </div>
+                        <div class="kpi-card">
+                            <div class="kpi-icon text-info"><i class="fa-solid fa-user-shield"></i></div>
+                            <div class="kpi-info">
+                                <span class="kpi-label">Personal Técnico Total</span>
+                                <h3 id="deployments-stat-techs" class="kpi-value">-</h3>
+                            </div>
+                        </div>
+                        <div class="kpi-card">
+                            <div class="kpi-icon text-purple" style="color: #c084fc;"><i class="fa-solid fa-map-location-dot"></i></div>
+                            <div class="kpi-info">
+                                <span class="kpi-label">Zonas Atendidas</span>
+                                <h3 id="deployments-stat-zones" class="kpi-value">-</h3>
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- Operational Ratios -->
+                    <div class="kpi-grid mt-4" style="width: 100%;">
+                        <div class="kpi-card" style="border-left: 4px solid var(--color-warning);">
+                            <div class="kpi-info">
+                                <span class="kpi-label">Carga (Tareas / Equipo)</span>
+                                <h3 id="deployments-ratio-tasks-team" class="kpi-value" style="font-size: 20px;">-</h3>
+                            </div>
+                        </div>
+                        <div class="kpi-card" style="border-left: 4px solid var(--color-primary);">
+                            <div class="kpi-info">
+                                <span class="kpi-label">Cobertura (Zonas / Equipo)</span>
+                                <h3 id="deployments-ratio-zones-team" class="kpi-value" style="font-size: 20px;">-</h3>
+                            </div>
+                        </div>
+                        <div class="kpi-card" style="border-left: 4px solid var(--color-success);">
+                            <div class="kpi-info">
+                                <span class="kpi-label">Staffing (Técnicos / Zona)</span>
+                                <h3 id="deployments-ratio-techs-zone" class="kpi-value" style="font-size: 20px;">-</h3>
+                            </div>
+                        </div>
+                        <div class="kpi-card" style="border-left: 4px solid var(--color-danger);">
+                            <div class="kpi-info">
+                                <span class="kpi-label">T. Promedio Cierre</span>
+                                <h3 id="deployments-ratio-avg-time" class="kpi-value" style="font-size: 20px;">-</h3>
+                            </div>
+                        </div>
+                        <div class="kpi-card" style="border-left: 4px solid #a855f7;">
+                            <div class="kpi-info">
+                                <span class="kpi-label">Despl. / Día / Equipo</span>
+                                <h3 id="deployments-ratio-tasks-day-team" class="kpi-value" style="font-size: 20px;">-</h3>
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- Dynamic Bottleneck & SLA Analysis Card -->
+                    <div class="card mt-4" style="width: 100%;">
+                        <div class="card-header">
+                            <h3><i class="fa-solid fa-brain text-success"></i> Análisis y Diagnóstico de Capacidad Operativa</h3>
+                        </div>
+                        <div class="card-body" id="deployments-analysis-content" style="font-size: 13px; line-height: 1.6; color: var(--color-text);">
+                            Cargando análisis de capacidad...
+                        </div>
+                    </div>
+
+                    <!-- Deployment Charts -->
+                    <div class="dashboard-grid mt-4">
+                        <!-- Chart 1: Partner Efficiency Horizontal Bar Chart -->
+                        <div class="grid-item card chart-card" style="grid-column: span 2;">
+                            <div class="card-header">
+                                <h3><i class="fa-solid fa-chart-bar"></i> Eficiencia por Partner (Atención <24H)</h3>
+                            </div>
+                            <div class="card-body">
+                                <div class="chart-container" style="height: 380px;">
+                                    <canvas id="chart-deployments-partner-efficiency"></canvas>
+                                </div>
+                            </div>
+                        </div>
+
+                        <!-- Chart 2: Workload vs Efficiency Dual Axis Chart -->
+                        <div class="grid-item card chart-card" style="grid-column: span 2;">
+                            <div class="card-header">
+                                <h3><i class="fa-solid fa-chart-line"></i> Relación Carga de Trabajo (Tareas/Equipo) vs Eficiencia por Partner</h3>
+                            </div>
+                            <div class="card-body">
+                                <div class="chart-container" style="height: 380px;">
+                                    <canvas id="chart-deployments-workload-vs-efficiency"></canvas>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- Detailed Deployment Table -->
+                    <div class="grid-item card table-card mt-4" style="width: 100%; grid-column: span 2;">
+                        <div class="card-header" style="display: flex; justify-content: space-between; align-items: center;">
+                            <h3><i class="fa-solid fa-table"></i> Detalle de Capacidad Operativa y Eficiencia por Partner/Sucursal</h3>
+                            <span class="pagination-info" style="font-size: 12px; color: var(--color-text-muted);">Haga clic en los encabezados para ordenar</span>
+                        </div>
+                        <div class="card-body">
+                            <div class="table-responsive">
+                                <table class="table table-hover" id="deployments-detailed-table">
+                                    <thead>
+                                        <tr>
+                                            <th style="cursor: pointer;" onclick="sortDeploymentsTable('partner')">Partner <i class="fa-solid fa-sort"></i></th>
+                                            <th style="cursor: pointer;" onclick="sortDeploymentsTable('branch')">Sucursal <i class="fa-solid fa-sort"></i></th>
+                                            <th style="cursor: pointer;" onclick="sortDeploymentsTable('total_tasks')">Tareas <i class="fa-solid fa-sort"></i></th>
+                                            <th style="cursor: pointer;" onclick="sortDeploymentsTable('sla_24h_pct')">SLA <24h <i class="fa-solid fa-sort"></i></th>
+                                            <th style="cursor: pointer;" onclick="sortDeploymentsTable('sla_48h_pct')">SLA <48h <i class="fa-solid fa-sort"></i></th>
+                                            <th style="cursor: pointer;" onclick="sortDeploymentsTable('teams_deploy')">Equipos Despl. <i class="fa-solid fa-sort"></i></th>
+                                            <th style="cursor: pointer;" onclick="sortDeploymentsTable('ft_total')">Técnicos <i class="fa-solid fa-sort"></i></th>
+                                            <th style="cursor: pointer;" onclick="sortDeploymentsTable('tasks_per_team')">Tareas / Equipo <i class="fa-solid fa-sort"></i></th>
+                                            <th style="cursor: pointer;" onclick="sortDeploymentsTable('zones_per_team')">Zonas / Equipo <i class="fa-solid fa-sort"></i></th>
+                                            <th style="cursor: pointer;" onclick="sortDeploymentsTable('techs_per_zone')">Técnicos / Zona <i class="fa-solid fa-sort"></i></th>
+                                            <th style="cursor: pointer;" onclick="sortDeploymentsTable('avg_close_time_hrs')">T. Promedio (Hrs) <i class="fa-solid fa-sort"></i></th>
+                                            <th style="cursor: pointer;" onclick="sortDeploymentsTable('deployments_per_day_per_team')">Despl. / Día / Equipo <i class="fa-solid fa-sort"></i></th>
+                                        </tr>
+                                    </thead>
+                                    <tbody id="deployments-table-body">
+                                        <!-- Dynamically filled -->
+                                    </tbody>
+                                </table>
+                            </div>
+                        </div>
+                    </div>
+                </section>
+                
+            </div>
+        </main>
+    
+    <!-- ======================================================== -->
+    <!-- MODALS SECTION -->
+    <!-- ======================================================== -->
+    
+    <!-- 1. ZONE MODAL (Add / Edit) -->
+    <div id="zone-modal" class="modal-overlay">
+        <div class="modal-content modal-lg">
+            <div class="modal-header">
+                <h3 id="zone-modal-title">Agregar Nueva Zona</h3>
+                <button class="modal-close"><i class="fa-solid fa-xmark"></i></button>
+            </div>
+            <div class="modal-body">
+                <form id="zone-form">
+                    <input type="hidden" id="zone-form-id">
+                    
+                    <div class="form-row">
+                        <div class="form-group col-md-4">
+                            <label for="zf-zone">Nombre de la Zona*</label>
+                            <input type="text" id="zf-zone" class="form-control" required placeholder="Ej: ARE_Z01">
+                        </div>
+                        <div class="form-group col-md-4">
+                            <label for="zf-branch">Sucursal (Branch)*</label>
+                            <input type="text" id="zf-branch" class="form-control" required placeholder="Ej: ARE">
+                        </div>
+                        <div class="form-group col-md-4">
+                            <label for="zf-saturation">Saturación (0-100%)</label>
+                            <input type="number" id="zf-saturation" class="form-control" min="0" max="100" step="0.01" placeholder="Ej: 15.23">
+                        </div>
+                    </div>
+                    
+                    <div class="form-row">
+                        <div class="form-group col-md-4">
+                            <label for="zf-active">Clientes Activos</label>
+                            <input type="number" id="zf-active" class="form-control" min="0" placeholder="0">
+                        </div>
+                        <div class="form-group col-md-4">
+                            <label for="zf-suspended">Clientes Suspendidos</label>
+                            <input type="number" id="zf-suspended" class="form-control" min="0" placeholder="0">
+                        </div>
+                        <div class="form-group col-md-4">
+                            <label for="zf-canceled">Clientes Cancelados</label>
+                            <input type="number" id="zf-canceled" class="form-control" min="0" placeholder="0">
+                        </div>
+                    </div>
+                    
+                    <div class="form-row">
+                        <div class="form-group col-md-4">
+                            <label for="zf-site-phys">Site Físico</label>
+                            <input type="text" id="zf-site-phys" class="form-control">
+                        </div>
+                        <div class="form-group col-md-4">
+                            <label for="zf-site-log">Site Lógico</label>
+                            <input type="text" id="zf-site-log" class="form-control">
+                        </div>
+                        <div class="form-group col-md-4">
+                            <label for="zf-olt">OLT</label>
+                            <input type="text" id="zf-olt" class="form-control">
+                        </div>
+                    </div>
+                    
+                    <div class="form-row">
+                        <div class="form-group col-md-4">
+                            <label for="zf-infrastructure">Tipo de Infraestructura</label>
+                            <input type="text" id="zf-infrastructure" class="form-control" placeholder="Ej: FTTH">
+                        </div>
+                        <div class="form-group col-md-4">
+                            <label for="zf-status">Estado del Servicio</label>
+                            <select id="zf-status" class="form-control">
+                                <option value="Online">Online</option>
+                                <option value="Offline">Offline</option>
+                                <option value="Pending">Pending</option>
+                            </select>
+                        </div>
+                        <div class="form-group col-md-4">
+                            <label for="zf-boxes-count">Cantidad de Cajas</label>
+                            <input type="number" id="zf-boxes-count" class="form-control" min="0" placeholder="0">
+                        </div>
+                    </div>
+                    
+                    <div class="form-row">
+                        <div class="form-group col-md-4">
+                            <label for="zf-dept">Departamento</label>
+                            <input type="text" id="zf-dept" class="form-control">
+                        </div>
+                        <div class="form-group col-md-4">
+                            <label for="zf-province">Provincia</label>
+                            <input type="text" id="zf-province" class="form-control">
+                        </div>
+                        <div class="form-group col-md-4">
+                            <label for="zf-district">Distrito</label>
+                            <input type="text" id="zf-district" class="form-control">
+                        </div>
+                    </div>
+                    
+                    <div class="form-group">
+                        <label for="zf-note">Notas</label>
+                        <textarea id="zf-note" class="form-control" rows="2"></textarea>
+                    </div>
+                    
+                    <!-- Assigned Staff Info Section -->
+                    <div class="mt-4 pt-3" style="border-top: 1px solid var(--border-color);">
+                        <h4 style="font-family: var(--font-title); font-size:15px; font-weight:600; margin-bottom:12px; color: var(--color-primary);">
+                            <i class="fa-solid fa-users-gear"></i> Personal / Staff Asignado a esta Zona (Solo Consulta)
+                        </h4>
+                        <div class="form-row">
+                            <div class="form-group col-md-6">
+                                <label>Equipo Staff</label>
+                                <input type="text" id="zf-staff-team" class="form-control" readonly style="background-color:rgba(255,255,255,0.01); border-style:dashed;">
+                            </div>
+                            <div class="form-group col-md-6">
+                                <label>Usuario VTP</label>
+                                <input type="text" id="zf-staff-vtp" class="form-control" readonly style="background-color:rgba(255,255,255,0.01); border-style:dashed;">
+                            </div>
+                        </div>
+                        <div class="form-row">
+                            <div class="form-group col-md-6">
+                                <label>Socio / Partner</label>
+                                <input type="text" id="zf-staff-partner" class="form-control" readonly style="background-color:rgba(255,255,255,0.01); border-style:dashed;">
+                            </div>
+                            <div class="form-group col-md-6">
+                                <label>Socio Incidencia</label>
+                                <input type="text" id="zf-staff-partner-inc" class="form-control" readonly style="background-color:rgba(255,255,255,0.01); border-style:dashed;">
+                            </div>
+                        </div>
+                    </div>
+                </form>
+            </div>
+            <div class="modal-footer">
+                <button class="btn btn-secondary modal-close-btn">Cancelar</button>
+                <button id="save-zone-btn" class="btn btn-primary">Guardar Zona</button>
+            </div>
+        </div>
+    </div>
+    
+    <!-- 2. BOX MODAL (Add / Edit) -->
+    <div id="box-modal" class="modal-overlay">
+        <div class="modal-content modal-lg">
+            <div class="modal-header">
+                <h3 id="box-modal-title">Agregar Nueva Caja</h3>
+                <button class="modal-close"><i class="fa-solid fa-xmark"></i></button>
+            </div>
+            <div class="modal-body">
+                <form id="box-form">
+                    <input type="hidden" id="box-form-id">
+                    
+                    <div class="form-row">
+                        <div class="form-group col-md-4">
+                            <label for="bf-node-code">Código de Nodo*</label>
+                            <input type="text" id="bf-node-code" class="form-control" required placeholder="Ej: ARE0005-XB01">
+                        </div>
+                        <div class="form-group col-md-4">
+                            <label for="bf-zone">Zona*</label>
+                            <input type="text" id="bf-zone" class="form-control" required placeholder="Ej: ARE_Z01">
+                        </div>
+                        <div class="form-group col-md-4">
+                            <label for="bf-branch">Sucursal (Branch)*</label>
+                            <input type="text" id="bf-branch" class="form-control" required placeholder="Ej: ARE">
+                        </div>
+                    </div>
+                    
+                    <div class="form-row">
+                        <div class="form-group col-md-4">
+                            <label for="bf-class">Clase de Caja</label>
+                            <input type="text" id="bf-class" class="form-control" placeholder="Ej: Distribution node">
+                        </div>
+                        <div class="form-group col-md-4">
+                            <label for="bf-type">Tipo de Caja</label>
+                            <input type="text" id="bf-type" class="form-control" placeholder="Ej: X_BOX">
+                        </div>
+                        <div class="form-group col-md-4">
+                            <label for="bf-status">Estado del Servicio</label>
+                            <select id="bf-status" class="form-control">
+                                <option value="Online">Online</option>
+                                <option value="Offline">Offline</option>
+                                <option value="Pending">Pending</option>
+                            </select>
+                        </div>
+                    </div>
+                    
+                    <div class="form-row">
+                        <div class="form-group col-md-6">
+                            <label for="bf-latitude">Latitud</label>
+                            <input type="number" id="bf-latitude" class="form-control" step="0.0000001" placeholder="Ej: -16.3343">
+                        </div>
+                        <div class="form-group col-md-6">
+                            <label for="bf-longitude">Longitud</label>
+                            <input type="number" id="bf-longitude" class="form-control" step="0.0000001" placeholder="Ej: -71.5416">
+                        </div>
+                    </div>
+                    
+                    <div class="form-row">
+                        <div class="form-group col-md-4">
+                            <label for="bf-olt">OLT</label>
+                            <input type="text" id="bf-olt" class="form-control">
+                        </div>
+                        <div class="form-group col-md-4">
+                            <label for="bf-ports-used">Puertos Usados</label>
+                            <input type="text" id="bf-ports-used" class="form-control" placeholder="Ej: 12">
+                        </div>
+                        <div class="form-group col-md-4">
+                            <label for="bf-infrastructure">Infraestructura</label>
+                            <input type="text" id="bf-infrastructure" class="form-control" placeholder="Ej: FTTH">
+                        </div>
+                    </div>
+                    
+                    <div class="form-row">
+                        <div class="form-group col-md-6">
+                            <label for="bf-site-phys">Site Físico</label>
+                            <input type="text" id="bf-site-phys" class="form-control">
+                        </div>
+                        <div class="form-group col-md-6">
+                            <label for="bf-site-log">Site Lógico</label>
+                            <input type="text" id="bf-site-log" class="form-control">
+                        </div>
+                    </div>
+                    
+                    <div class="form-group">
+                        <label for="bf-note">Notas</label>
+                        <textarea id="bf-note" class="form-control" rows="2"></textarea>
+                    </div>
+                </form>
+            </div>
+            <div class="modal-footer">
+                <button class="btn btn-secondary modal-close-btn">Cancelar</button>
+                <button id="save-box-btn" class="btn btn-primary">Guardar Caja</button>
+            </div>
+        </div>
+    </div>
+    
+    <!-- 3. STAFF MODAL (Add / Edit) -->
+    <div id="staff-modal" class="modal-overlay">
+        <div class="modal-content modal-lg">
+            <div class="modal-header">
+                <h3 id="staff-modal-title">Agregar Nuevo Personal</h3>
+                <button class="modal-close"><i class="fa-solid fa-xmark"></i></button>
+            </div>
+            <div class="modal-body">
+                <form id="staff-form">
+                    <input type="hidden" id="staff-form-id">
+                    
+                    <div class="form-row">
+                        <div class="form-group col-md-6">
+                            <label for="sf-staff-team">Equipo Staff*</label>
+                            <input type="text" id="sf-staff-team" class="form-control" required placeholder="Nombre del personal / equipo">
+                        </div>
+                        <div class="form-group col-md-6">
+                            <label for="sf-vtp-username">Usuario VTP</label>
+                            <input type="text" id="sf-vtp-username" class="form-control" placeholder="Ej: vtp_luis.condori">
+                        </div>
+                    </div>
+                    
+                    <div class="form-row">
+                        <div class="form-group col-md-4">
+                            <label for="sf-zone">Zona*</label>
+                            <input type="text" id="sf-zone" class="form-control" required placeholder="Ej: ARE_Z01">
+                        </div>
+                        <div class="form-group col-md-4">
+                            <label for="sf-branch">Sucursal (Branch)</label>
+                            <input type="text" id="sf-branch" class="form-control" placeholder="Ej: ARE">
+                        </div>
+                        <div class="form-group col-md-4">
+                            <label for="sf-olt">OLT</label>
+                            <input type="text" id="sf-olt" class="form-control" placeholder="Ej: ARE0005OLT01">
+                        </div>
+                    </div>
+                    
+                    <div class="form-row">
+                        <div class="form-group col-md-4">
+                            <label for="sf-partner">Socio / Partner</label>
+                            <input type="text" id="sf-partner" class="form-control" placeholder="Ej: RUPAY">
+                        </div>
+                        <div class="form-group col-md-4">
+                            <label for="sf-partner-incidence">Socio Incidencia</label>
+                            <input type="text" id="sf-partner-incidence" class="form-control" placeholder="Ej: ELECTRONICSMART">
+                        </div>
+                        <div class="form-group col-md-4">
+                            <label for="sf-warranty">Periodo Garantía (Días)</label>
+                            <input type="number" id="sf-warranty" class="form-control" placeholder="Ej: 30">
+                        </div>
+                    </div>
+                    
+                    <div class="form-row">
+                        <div class="form-group col-md-6">
+                            <label for="sf-site">Site (OLT Site)</label>
+                            <input type="text" id="sf-site" class="form-control" placeholder="Ej: ARE0005">
+                        </div>
+                        <div class="form-group col-md-6">
+                            <label for="sf-site-code">Site Code</label>
+                            <input type="text" id="sf-site-code" class="form-control" placeholder="Ej: LAL0014">
+                        </div>
+                    </div>
+                    
+                    <div class="form-row">
+                        <div class="form-group col-md-4">
+                            <label for="sf-team-dist">Distribución de Equipos</label>
+                            <input type="text" id="sf-team-dist" class="form-control">
+                        </div>
+                        <div class="form-group col-md-4">
+                            <label for="sf-incidents-dist">Distribución Incidencias</label>
+                            <input type="text" id="sf-incidents-dist" class="form-control">
+                        </div>
+                        <div class="form-group col-md-4">
+                            <label for="sf-incidents-dist-team">Incidencias por Equipo</label>
+                            <input type="text" id="sf-incidents-dist-team" class="form-control">
+                        </div>
+                    </div>
+                </form>
+            </div>
+            <div class="modal-footer">
+                <button class="btn btn-secondary modal-close-btn">Cancelar</button>
+                <button id="save-staff-btn" class="btn btn-primary">Guardar Asignación</button>
+            </div>
+        </div>
+    </div>
+    
+    <!-- 4. DETALLE DE CORTES MODAL -->
+    <div id="outage-details-modal" class="modal-overlay">
+        <div class="modal-card" style="max-width: 900px; width: 90%;">
+            <div class="modal-header">
+                <h3><i class="fa-solid fa-circle-exclamation text-danger"></i> Detalle de Cortes - <span id="outage-modal-title-site">SITE</span></h3>
+                <button class="modal-close-icon modal-close-btn">&times;</button>
+            </div>
+            <div class="modal-body">
+                <div class="table-responsive" style="max-height: 450px; overflow-y: auto;">
+                    <table class="table table-hover table-sm">
+                        <thead>
+                            <tr>
+                                <th>Nombre OLT</th>
+                                <th>Puerto PON</th>
+                                <th>Tipo Corte</th>
+                                <th>Fecha y Hora</th>
+                                <th>Clientes Afectados</th>
+                                <th>WOs Creadas</th>
+                                <th>Causa</th>
+                                <th>IDs ONUs</th>
+                            </tr>
+                        </thead>
+                        <tbody id="outage-details-table-body">
+                            <!-- Filled dynamically -->
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+            <div class="modal-footer">
+                <button class="btn btn-secondary modal-close-btn">Cerrar</button>
+            </div>
+        </div>
+    </div>
+    
+    <!-- 4.5 DETALLE DE WOs MODAL -->
+    <div id="wo-details-modal" class="modal-overlay">
+        <div class="modal-card" style="max-width: 900px; width: 90%;">
+            <div class="modal-header">
+                <h3><i class="fa-solid fa-file-invoice text-primary"></i> Detalle de WOs - <span id="wo-modal-title-site">SITE</span></h3>
+                <button class="modal-close-icon modal-close-btn">&times;</button>
+            </div>
+            <div class="modal-body">
+                <div class="table-responsive" style="max-height: 450px; overflow-y: auto;">
+                    <table class="table table-hover table-sm">
+                        <thead>
+                            <tr>
+                                <th>Código WO</th>
+                                <th>Cliente</th>
+                                <th>Fecha Creación</th>
+                                <th>Contrata Cierre</th>
+                                <th>¿Reincidente?</th>
+                                <th>Motivo Cierre / Estatus</th>
+                            </tr>
+                        </thead>
+                        <tbody id="wo-details-table-body">
+                            <!-- Filled dynamically -->
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+            <div class="modal-footer">
+                <button class="btn btn-secondary modal-close-btn">Cerrar</button>
+            </div>
+        </div>
+    </div>
+    
+    <!-- 3. TOAST NOTIFICATIONS -->
+    <div id="toast-container" class="toast-container"></div>
+    
+    <!-- ======================================================== -->
+    <!-- SCRIPTS -->
+    <!-- ======================================================== -->
+    
+    <!-- Chart.js -->
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+    
+    <!-- Leaflet.js Map -->
+    <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js" integrity="sha256-20nQCchB9co0qIjJZRGuk2/Z9VM+kNiyxNV1lvTlZBo=" crossorigin=""></script>
+    
+    <!-- Custom Application JS -->
+    <script src="/static/js/app.js?v=4"></script>
+</body>
+</html>

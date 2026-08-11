@@ -1,0 +1,6 @@
+- `[x]` Inicializar base de datos SQLite y cargar palabras clave (`db_setup.py`)
+- `[x]` Implementar el script de procesamiento del Excel (`process_data.py`)
+- `[x]` Crear el servidor Flask para APIs y archivos estáticos (`server.py`)
+- `[x]` Desarrollar la interfaz frontend del dashboard (`static/index.html`, `static/style.css`, `static/app.js`)
+- `[x]` Iniciar el servidor local y verificar la funcionalidad
+- `[x]` Implementar la descarga robusta con multi-status select (`download_report.py`)

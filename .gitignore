@@ -1,0 +1,48 @@
+# --- Secrets: never commit ---
+.env
+*.env
+!.env.example
+google_service_account.json
+**/tu_archivo_de_credenciales.json
+**/*credenciales*.json
+**/*service_account*.json
+nims_login_state.json
+
+# --- Python ---
+__pycache__/
+**/__pycache__/
+*.pyc
+.venv/
+venv/
+
+# --- Databases ---
+*.db
+*.db-journal
+*.db-wal
+*.db-shm
+
+# --- Downloaded/generated data & scratch artifacts ---
+*.xlsx
+*.xls
+*.csv
+*.png
+*.log
+*.txt
+!requirements.txt
+playwright_session/
+descargas/
+TMs/
+NIMS/
+GUÍA OLT/
+olt_battery_dashboard/
+
+# --- Local Claude Code config ---
+.claude/
+
+# --- Editor/OS ---
+.DS_Store
+Thumbs.db
+
+# --- Cloud app local artifacts ---
+cloud_app/*.db
+cloud_app/instance/

@@ -1,0 +1,2608 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>FBB DATA</title>
+    <!-- Google Fonts: Outfit -->
+    <link href="https://fonts.googleapis.com/css2?family=Outfit:wght@300;400;500;600;700&display=swap" rel="stylesheet">
+    <!-- FontAwesome para iconos -->
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+    <!-- Chart.js para visualización de gráficos -->
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+    <!-- Leaflet.js Map CSS (módulo FBB DATA) -->
+    <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" integrity="sha256-p4NxAoJBhIIN+hmNHrzRCf9tD/miZyoHS5obTRR9BMY=" crossorigin=""/>
+    <link rel="stylesheet" href="style.css?v=10">
+    <link rel="stylesheet" href="fbb-style.css?v=2">
+</head>
+<body>
+    <div class="app-container">
+        <!-- Sidebar -->
+        <aside class="sidebar">
+            <div class="brand">
+                <div class="brand-logo">
+                    <i class="fa-solid fa-chart-line-up"></i>
+                </div>
+                <h2>FBB DATA</h2>
+            </div>
+            
+            <nav class="nav-menu">
+                <a href="#" class="nav-item active" data-page="dashboard">
+                    <i class="fa-solid fa-gauge"></i>
+                    <span>Averías pendientes</span>
+                </a>
+                <a href="#" class="nav-item" data-page="deploy-pending" id="nav-deploy-pending">
+                    <i class="fa-solid fa-screwdriver-wrench"></i>
+                    <span>Despliegues pendientes</span>
+                </a>
+                <a href="#" class="nav-item" data-page="orders">
+                    <i class="fa-solid fa-list-check"></i>
+                    <span>Órdenes de Trabajo</span>
+                </a>
+                <a href="#" class="nav-item" data-page="nims">
+                    <i class="fa-solid fa-sitemap"></i>
+                    <span>Averías por Caja (NIMS)</span>
+                </a>
+                <a href="#" class="nav-item" data-page="topology">
+                    <i class="fa-solid fa-diagram-project"></i>
+                    <span>Inspector Topología</span>
+                </a>
+                <a href="#" class="nav-item" data-page="olt" id="nav-olt">
+                    <i class="fa-solid fa-tower-broadcast"></i>
+                    <span>Auditoría OLT</span>
+                    <span id="olt-alarm-badge" class="alarm-badge" style="display:none;">!</span>
+                </a>
+                <a href="#" class="nav-item" data-page="kpi" id="nav-kpi">
+                    <i class="fa-solid fa-chart-line"></i>
+                    <span>Reporte KPI</span>
+                </a>
+                <a href="#" class="nav-item" data-page="credentials" id="nav-credentials">
+                    <i class="fa-solid fa-key"></i>
+                    <span>Credenciales</span>
+                </a>
+
+                <div class="nav-section-label">FBB DATA</div>
+                <a href="#" class="nav-item" data-page="fbb-dashboard" id="nav-fbb-dashboard">
+                    <i class="fa-solid fa-chart-pie"></i>
+                    <span>Panel de Control</span>
+                </a>
+                <a href="#" class="nav-item" data-page="fbb-zones" id="nav-fbb-zones">
+                    <i class="fa-solid fa-earth-americas"></i>
+                    <span>Zonas Activas</span>
+                </a>
+                <a href="#" class="nav-item" data-page="fbb-boxes" id="nav-fbb-boxes">
+                    <i class="fa-solid fa-box-archive"></i>
+                    <span>Lista de Cajas</span>
+                </a>
+                <a href="#" class="nav-item" data-page="fbb-staff" id="nav-fbb-staff">
+                    <i class="fa-solid fa-users-gear"></i>
+                    <span>Personal (Staff)</span>
+                </a>
+                <a href="#" class="nav-item" data-page="fbb-partner-capacity" id="nav-fbb-partner-capacity">
+                    <i class="fa-solid fa-people-carry-box"></i>
+                    <span>Capacidad Partners</span>
+                </a>
+                <a href="#" class="nav-item" data-page="fbb-incidents" id="nav-fbb-incidents">
+                    <i class="fa-solid fa-triangle-exclamation"></i>
+                    <span>Incidentes</span>
+                </a>
+                <a href="#" class="nav-item" data-page="fbb-deployments" id="nav-fbb-deployments">
+                    <i class="fa-solid fa-screwdriver-wrench"></i>
+                    <span>Despliegues</span>
+                </a>
+
+                <div class="fbb-sync-widget">
+                    <button id="sync-btn" class="btn-sync" title="Actualiza zonas, cajas, personal e incidentes desde el Google Sheet original de FBB DATA">
+                        <i class="fa-solid fa-cloud-arrow-down"></i>
+                        <span>Sincronizar FBB</span>
+                    </button>
+                    <div id="sync-loading" class="fbb-sync-loading hidden">
+                        <i class="fa-solid fa-spinner fa-spin"></i> Sincronizando...
+                    </div>
+                </div>
+            </nav>
+            
+            <div class="user-profile">
+                <div class="avatar">JR</div>
+                <div class="user-info">
+                    <span class="user-name">JHOEL RIVERA SOSAYA</span>
+                    <span class="user-role">Administrador</span>
+                </div>
+            </div>
+        </aside>
+
+        <!-- Main Content -->
+        <main class="main-content">
+            <!-- Header -->
+            <header class="header">
+                <div class="header-title">
+                    <h1 id="page-title">Averías Pendientes — Avance SLA y Tipificación</h1>
+                    <p id="page-subtitle">Monitoreo en tiempo real de órdenes de trabajo de GNOC desde Junio 2026</p>
+                    <p id="last-sync-info" class="last-sync-info"><i class="fa-regular fa-clock"></i> Última sincronización: <span id="last-sync-value">Cargando...</span></p>
+                </div>
+                <div class="header-actions">
+                    <div class="sync-range-picker" title="Rango de meses a descargar de GNOC (WOs pendientes y cerradas). Automático = últimos 60 días. Tableau y NIMS siempre descargan todo.">
+                        <i class="fa-regular fa-calendar-days"></i>
+                        <select id="sync-from-month" class="filter-select-sm" aria-label="Mes de inicio"></select>
+                        <span class="range-sep">a</span>
+                        <select id="sync-to-month" class="filter-select-sm" aria-label="Mes de fin"></select>
+                        <button id="btn-sync-range-clear" class="range-clear-btn" title="Volver a automático (últimos 60 días)">
+                            <i class="fa-solid fa-xmark"></i>
+                        </button>
+                    </div>
+                    <span id="sync-timer-badge" class="timer-badge" style="display: none;">
+                        <i class="fa-regular fa-stopwatch"></i>
+                        <span id="sync-timer-text">00:00</span>
+                    </span>
+                    <button id="btn-sync" class="btn-sync">
+                        <i class="fa-solid fa-arrows-rotate"></i>
+                        <span>Sincronizar Excel</span>
+                    </button>
+                    <span class="date-badge">
+                        <i class="fa-regular fa-calendar"></i>
+                        <span id="current-time-badge">Cargando...</span>
+                    </span>
+                </div>
+            </header>
+
+            <!-- ==================== PÁGINA: DASHBOARD ==================== -->
+            <div id="page-dashboard" class="page-section active">
+
+            <!-- Cards Grid -->
+            <section class="cards-grid">
+                <div class="stat-card">
+                    <div class="card-icon blue">
+                        <i class="fa-solid fa-ticket"></i>
+                    </div>
+                    <div class="card-data">
+                        <h3>Total Activas</h3>
+                        <p id="stat-total" class="value">0</p>
+                    </div>
+                </div>
+                
+                <div class="stat-card">
+                    <div class="card-icon green">
+                        <i class="fa-solid fa-clock-rotate-left"></i>
+                    </div>
+                    <div class="card-data">
+                        <h3>Pendiente &lt; 24h</h3>
+                        <p id="stat-24" class="value">0</p>
+                    </div>
+                </div>
+                
+                <div class="stat-card">
+                    <div class="card-icon yellow">
+                        <i class="fa-solid fa-triangle-exclamation"></i>
+                    </div>
+                    <div class="card-data">
+                        <h3>Pendiente 24h - 48h</h3>
+                        <p id="stat-48" class="value">0</p>
+                    </div>
+                </div>
+                
+                <div class="stat-card">
+                    <div class="card-icon orange">
+                        <i class="fa-solid fa-hourglass-half"></i>
+                    </div>
+                    <div class="card-data">
+                        <h3>Pendiente 48h - 72h</h3>
+                        <p id="stat-72" class="value">0</p>
+                    </div>
+                </div>
+                
+                <div class="stat-card">
+                    <div class="card-icon red">
+                        <i class="fa-solid fa-fire"></i>
+                    </div>
+                    <div class="card-data">
+                        <h3>Pendiente &gt; 72h</h3>
+                        <p id="stat-over72" class="value">0</p>
+                    </div>
+                </div>
+                
+                <div class="stat-card">
+                    <div class="card-icon purple">
+                        <i class="fa-solid fa-bug"></i>
+                    </div>
+                    <div class="card-data">
+                        <h3>Errores (Marlo)</h3>
+                        <p id="stat-errors" class="value">0</p>
+                    </div>
+                </div>
+            </section>
+
+            <!-- Charts Section -->
+            <section class="charts-section">
+                <div class="chart-container card">
+                    <h3>Distribución de SLA Pendiente</h3>
+                    <div class="chart-wrapper">
+                        <canvas id="slaChart"></canvas>
+                    </div>
+                </div>
+                
+                <div class="chart-container card">
+                    <h3>Top 5 Branches con Mayor Cantidad de Averías</h3>
+                    <div class="chart-wrapper">
+                        <canvas id="branchChart"></canvas>
+                    </div>
+                </div>
+
+                <div class="chart-container card full-width">
+                    <div style="display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 10px;">
+                        <h3 style="margin: 0;">Tipificación por Motivo de Cierre</h3>
+                        <div class="month-multiselect" id="typification-month-picker">
+                            <button type="button" class="month-multiselect-toggle" id="typification-month-toggle">
+                                <i class="fa-regular fa-calendar"></i>
+                                <span id="typification-month-label">Todos los meses</span>
+                                <i class="fa-solid fa-chevron-down toggle-caret"></i>
+                            </button>
+                            <div class="month-multiselect-panel" id="typification-month-panel"></div>
+                        </div>
+                    </div>
+                    <div class="chart-wrapper tall">
+                        <canvas id="reasonsChart"></canvas>
+                    </div>
+                </div>
+            </section>
+
+            <!-- Reports Section (SLA by Branch and Typification) -->
+            <section class="charts-section mt-2" style="grid-template-columns: repeat(auto-fit, minmax(450px, 1fr)); margin-bottom: 20px;">
+                <!-- SLA by Branch Card -->
+                <div class="table-section card">
+                    <div class="table-header" style="border-bottom: 1px solid rgba(255, 255, 255, 0.05); padding-bottom: 10px; margin-bottom: 10px;">
+                        <h2 style="font-size: 1.1rem; font-weight: 600;"><i class="fa-solid fa-building-user" style="color: #4285F4; margin-right: 8px;"></i> SLA Pendiente por Sucursal (Branch)</h2>
+                    </div>
+                    <div class="table-responsive">
+                        <table class="data-table small-table" style="font-size: 13px;">
+                            <thead>
+                                <tr>
+                                    <th>Branch</th>
+                                    <th class="text-center">&lt; 24h</th>
+                                    <th class="text-center">24h - 48h</th>
+                                    <th class="text-center">48h - 72h</th>
+                                    <th class="text-center">&gt; 72h</th>
+                                    <th class="text-center" style="font-weight: bold; color: #4285F4;">Total</th>
+                                </tr>
+                            </thead>
+                            <tbody id="branch-sla-table-body">
+                                <tr><td colspan="6" class="text-center">Cargando reporte de SLA por branch...</td></tr>
+                            </tbody>
+                        </table>
+                    </div>
+                </div>
+
+                <!-- Typification Close Reasons Card -->
+                <div class="table-section card">
+                    <div class="table-header" style="border-bottom: 1px solid rgba(255, 255, 255, 0.05); padding-bottom: 10px; margin-bottom: 10px;">
+                        <h2 style="font-size: 1.1rem; font-weight: 600;"><i class="fa-solid fa-tags" style="color: #AB47BC; margin-right: 8px;"></i> Resumen de Tipificación y Casos</h2>
+                    </div>
+                    <div class="table-responsive">
+                        <table class="data-table small-table" style="font-size: 13px;">
+                            <thead>
+                                <tr>
+                                    <th>Clasificación / Motivo</th>
+                                    <th class="text-center">Total Casos</th>
+                                    <th class="text-center">Pendientes</th>
+                                </tr>
+                            </thead>
+                            <tbody id="typification-table-body">
+                                <tr><td colspan="3" class="text-center">Cargando reporte de tipificación...</td></tr>
+                            </tbody>
+                        </table>
+                    </div>
+                </div>
+            </section>
+
+            </div><!-- /page-dashboard -->
+
+            <!-- ==================== PÁGINA: ÓRDENES DE TRABAJO ==================== -->
+            <div id="page-orders" class="page-section">
+            <section id="table-section" class="table-section card">
+                <div class="table-header">
+                    <h2>Listado de Órdenes de Trabajo</h2>
+                    <div class="table-filters">
+                        <div class="search-box">
+                            <i class="fa-solid fa-magnifying-glass"></i>
+                            <input type="text" id="table-search" placeholder="Buscar código, técnico, grupo, motivo...">
+                        </div>
+                        <select id="filter-type" class="filter-select">
+                            <option value="all">Total (Todas las órdenes)</option>
+                            <option value="pending">Solo Pendientes (Todas)</option>
+                            <option value="valid">Pendientes sin errores</option>
+                            <option value="error">Errores (Marlo)</option>
+                        </select>
+                        <select id="filter-cd" class="filter-select">
+                            <option value="all">Todos los grupos (CD)</option>
+                        </select>
+                        <button id="btn-export-table" class="btn-export">
+                            <i class="fa-solid fa-file-excel"></i>
+                            <span>Exportar Excel</span>
+                        </button>
+                    </div>
+                </div>
+
+                <div class="table-responsive">
+                    <table class="data-table">
+                        <thead>
+                            <tr>
+                                <th>Código WO</th>
+                                <th>Branch</th>
+                                <th>Fecha Creación</th>
+                                <th>Grupo (CD)</th>
+                                <th>Técnico (FT)</th>
+                                <th>Tiempo Pendiente</th>
+                                <th>Garantía (Días)</th>
+                                <th>Caja (Connector)</th>
+                                <th>Clasificación</th>
+                                <th>Estado</th>
+                            </tr>
+                        </thead>
+                        <tbody id="table-body">
+                            <tr>
+                                <td colspan="10" class="loading-cell">Cargando registros de órdenes de trabajo...</td>
+                            </tr>
+                        </tbody>
+                    </table>
+                </div>
+
+                <!-- Pagination -->
+                <div class="table-pagination">
+                    <span class="pagination-info">Mostrando <span id="pag-start">0</span> a <span id="pag-end">0</span> de <span id="pag-total">0</span> órdenes</span>
+                    <div class="pagination-buttons">
+                        <button id="btn-prev" class="btn-page" disabled><i class="fa-solid fa-chevron-left"></i> Prev</button>
+                        <button id="btn-next" class="btn-page" disabled>Next <i class="fa-solid fa-chevron-right"></i></button>
+                    </div>
+                </div>
+            </section>
+            </div><!-- /page-orders -->
+
+            <!-- ==================== PÁGINA: AVERÍAS NIMS ==================== -->
+            <div id="page-nims" class="page-section">
+            <section id="nims-section" class="table-section mt-2">
+                <div class="table-card card">
+                    <div class="table-header">
+                        <div>
+                            <h2><i class="fa-solid fa-sitemap"></i> Reporte de Averías por Caja y Sitios (NIMS)</h2>
+                            <p>Análisis de concentración de averías en cajas de distribución, líneas y Sites</p>
+                        </div>
+                        <button id="btn-refresh-nims" class="btn-export">
+                            <i class="fa-solid fa-arrows-rotate"></i> Actualizar Reporte
+                        </button>
+                    </div>
+                    
+                    <div class="cards-grid border-grid mt-1">
+                        <div class="stat-card mini">
+                            <div class="card-icon red"><i class="fa-solid fa-box-open"></i></div>
+                            <div class="card-data">
+                                <h3>Cajas Afectadas</h3>
+                                <p id="nims-stat-boxes" class="value">0</p>
+                            </div>
+                        </div>
+                        <div class="stat-card mini">
+                            <div class="card-icon yellow"><i class="fa-solid fa-tower-cell"></i></div>
+                            <div class="card-data">
+                                <h3>Sitios Afectados</h3>
+                                <p id="nims-stat-sites" class="value">0</p>
+                            </div>
+                        </div>
+                        <div class="stat-card mini">
+                            <div class="card-icon blue"><i class="fa-solid fa-users"></i></div>
+                            <div class="card-data">
+                                <h3>Clientes Afectados</h3>
+                                <p id="nims-stat-clients" class="value">0</p>
+                            </div>
+                        </div>
+                    </div>
+
+                    <h3 class="mt-2 text-primary"><i class="fa-solid fa-fire"></i> Top Cajas de Distribución con Más Averías</h3>
+                    <div class="table-wrapper">
+                        <table class="data-table">
+                            <thead>
+                                <tr>
+                                    <th>SITIO</th>
+                                    <th>CAJA PRINCIPAL</th>
+                                    <th>EXPANSIÓN</th>
+                                    <th>LÍNEA / HB</th>
+                                    <th>RUTA JERÁRQUICA COMPLETA</th>
+                                    <th>WOs AFECTADAS</th>
+                                    <th>CLIENTES AFECTADOS</th>
+                                    <th>DÍAS DE OCURRENCIA</th>
+                                    <th>MOTIVO PRINCIPAL DE FALLA</th>
+                                </tr>
+                            </thead>
+                            <tbody id="nims-boxes-table-body">
+                                <tr><td colspan="9" class="text-center">Cargando reporte de averías por caja NIMS...</td></tr>
+                            </tbody>
+                        </table>
+                    </div>
+                </div>
+            </section>
+            </div><!-- /page-nims -->
+
+            <!-- ==================== PÁGINA: INSPECTOR TOPOLOGÍA ==================== -->
+            <div id="page-topology" class="page-section">
+
+            <section id="alarms-section" class="table-section mt-2">
+                <div class="table-card card">
+                    <div class="table-header">
+                        <div>
+                            <h2><i class="fa-solid fa-triangle-exclamation"></i> Alarmas de Red (todos los sites)</h2>
+                            <p id="alarm-scan-status-text">Escaneo automático cada ~3h de todas las cajas del país (muestreo + confirmación). Cargando estado...</p>
+                        </div>
+                        <div class="table-filters">
+                            <div class="search-box">
+                                <i class="fa-solid fa-magnifying-glass"></i>
+                                <input type="text" id="alarm-site-filter" placeholder="Buscar SITE (ej: CAL0056)">
+                            </div>
+                            <select id="alarm-branch-filter" class="filter-select">
+                                <option value="">Todos los Branch</option>
+                                <option value="ARE">ARE</option>
+                                <option value="CAJ">CAJ</option>
+                                <option value="CUS">CUS</option>
+                                <option value="HUN">HUN</option>
+                                <option value="JUN">JUN</option>
+                                <option value="LAL">LAL</option>
+                                <option value="LI1">LI1</option>
+                                <option value="LI2">LI2</option>
+                                <option value="LI3">LI3</option>
+                                <option value="LI4">LI4</option>
+                                <option value="LI7">LI7</option>
+                                <option value="PIU">PIU</option>
+                                <option value="SAN">SAN</option>
+                            </select>
+                            <select id="alarm-severity-filter" class="filter-select">
+                                <option value="">Todas las severidades</option>
+                                <option value="critical">🔴 Crítica (site caído)</option>
+                                <option value="media">🟠 Media (varias cajas)</option>
+                                <option value="caja">🟡 Caja (puntual)</option>
+                            </select>
+                            <button id="btn-refresh-alarms" class="btn-sync">
+                                <i class="fa-solid fa-rotate"></i>
+                                <span>Refrescar</span>
+                            </button>
+                        </div>
+                    </div>
+                    <div class="table-responsive">
+                        <table class="data-table">
+                            <thead>
+                                <tr>
+                                    <th>Hora</th>
+                                    <th>Severidad</th>
+                                    <th>Branch</th>
+                                    <th>Site</th>
+                                    <th>Caja</th>
+                                    <th>Act/On/Off</th>
+                                    <th>Mensaje</th>
+                                </tr>
+                            </thead>
+                            <tbody id="alarms-table-body">
+                                <tr><td colspan="7" class="text-center">Cargando alarmas...</td></tr>
+                            </tbody>
+                        </table>
+                    </div>
+                </div>
+            </section>
+
+            <section id="topology-section" class="table-section mt-2">
+                <div class="table-card card">
+                    <div class="table-header">
+                        <div>
+                            <h2><i class="fa-solid fa-diagram-project"></i> Inspector de Topología de Red</h2>
+                            <p>Validación en vivo GPON + BRAS por Site/OLT/HUBBOX: detecta cajas caídas (clientes activos NOT ONLINE)</p>
+                        </div>
+                        <div class="table-filters">
+                            <div class="search-box">
+                                <i class="fa-solid fa-tower-broadcast"></i>
+                                <input type="text" id="topo-site-input" placeholder="SITE (ej: CAL0056, ARE0033)">
+                            </div>
+                            <select id="topo-olt-select" class="filter-select">
+                                <option value="1">OLT 1</option>
+                                <option value="2">OLT 2</option>
+                            </select>
+                            <select id="topo-hubbox-select" class="filter-select">
+                                <option value="Todas">HUBBOX: Todas</option>
+                                <option value="HB01">HB01</option>
+                                <option value="HB02">HB02</option>
+                                <option value="HB03">HB03</option>
+                                <option value="HB04">HB04</option>
+                            </select>
+                            <button id="btn-topo-scan" class="btn-sync">
+                                <i class="fa-solid fa-satellite-dish"></i>
+                                <span>Validar y Dibujar Topología</span>
+                            </button>
+                        </div>
+                    </div>
+
+                    <div id="topo-scan-loading" class="mt-2" style="display: none; color: #9AA0A6;">
+                        <i class="fa-solid fa-spinner fa-spin"></i> Consultando BRAS en vivo para cada abonado activo (solo 2 consultas en paralelo para no saturar BRAS: un site completo puede tardar varios minutos; filtra por un HUBBOX específico para una respuesta más rápida)...
+                    </div>
+
+                    <div id="topo-scan-result" class="mt-2" style="display: none;">
+                        <div id="topo-alarm-banner" class="mb-2" style="display: none;"></div>
+
+                        <div class="topology-card card p-2 bg-dark-card">
+                            <h3 class="text-accent mb-1"><i class="fa-solid fa-route"></i> <span id="topo-scan-title">-</span></h3>
+                            <div class="info-grid mb-2">
+                                <div><strong>Branch:</strong> <span id="topo-scan-branch">-</span></div>
+                                <div><strong>Total abonados activos:</strong> <span id="topo-scan-total-act">-</span></div>
+                                <div><strong>Online:</strong> <span id="topo-scan-total-online" style="color:#34A853;">-</span></div>
+                                <div><strong>Not Online:</strong> <span id="topo-scan-total-offline" style="color:#EA4335;">-</span></div>
+                                <div><strong>Sin datos:</strong> <span id="topo-scan-total-unknown" style="color:#9AA0A6;">-</span></div>
+                                <div><strong>Nunca Online:</strong> <span id="topo-scan-total-never" style="color:#AB47BC;" title="Sin BRAS asignado en TMs: nunca tuvo sesión, no es una caída">-</span></div>
+                            </div>
+                            <p style="font-size:12px; color:#9AA0A6;"><i class="fa-solid fa-circle-info"></i> Click en una caja para ver sus clientes.</p>
+                            <div id="topo-scan-grid"></div>
+                        </div>
+                    </div>
+                </div>
+            </section>
+            </div><!-- /page-topology -->
+
+            <!-- ==================== PÁGINA: AUDITORÍA OLT ==================== -->
+            <div id="page-olt" class="page-section">
+                <!-- Header OLT -->
+                <div class="olt-header card" style="margin-bottom:20px;padding:20px 24px;">
+                    <div style="display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:12px;">
+                        <div>
+                            <h2 style="font-size:1.3rem;font-weight:700;margin:0;">
+                                <i class="fa-solid fa-tower-broadcast" style="color:#4285F4;margin-right:8px;"></i>
+                                Auditoría OLT — Estado de ONUs en Tiempo Real
+                            </h2>
+                            <p id="olt-last-scan" style="margin:4px 0 0;color:#9AA0A6;font-size:13px;">Escaneo automático continuo — cargando estado...</p>
+                        </div>
+                        <div style="display:flex;gap:10px;align-items:center;flex-wrap:wrap;">
+                            <span id="olt-scan-progress-wrap" style="display:none;align-items:center;gap:8px;">
+                                <div class="olt-progress-bar-bg">
+                                    <div id="olt-progress-bar" class="olt-progress-bar-fill" style="width:0%"></div>
+                                </div>
+                                <span id="olt-progress-pct" style="font-size:12px;color:#9AA0A6;">0%</span>
+                            </span>
+                            <button id="btn-olt-scan-cancel" class="btn-sync" style="display:none; background: #EA4335; border-color: #EA4335;">
+                                <i class="fa-solid fa-ban"></i>
+                                <span>Cancelar Escaneo</span>
+                            </button>
+                            <button id="btn-olt-consultar" class="btn-sync" style="background: #34A853; border-color: #34A853;">
+                                <i class="fa-solid fa-list-check"></i>
+                                <span>Consultar OLTs</span>
+                            </button>
+                            <button id="btn-olt-scan" class="btn-sync">
+                                <i class="fa-solid fa-radar"></i>
+                                <span>Forzar Escaneo</span>
+                            </button>
+                        </div>
+                    </div>
+                    <!-- Cards de resumen (Interactivas) -->
+                    <div class="olt-summary-cards" style="margin-top:18px;">
+                        <div class="olt-stat-card blue" id="olt-stat-olts-card" title="Click para ver la tabla Resumen por OLT" style="cursor:pointer;">
+                            <i class="fa-solid fa-network-wired"></i>
+                            <div>
+                                <p class="olt-stat-label">OLTs Escaneadas <i class="fa-solid fa-arrow-up-right-from-square" style="font-size:10px;opacity:0.7;"></i></p>
+                                <p id="olt-stat-olts" class="olt-stat-val">—</p>
+                            </div>
+                        </div>
+                        <div class="olt-stat-card red" id="olt-stat-fallas-card" title="Click para ver el Resumen por OLT" style="cursor:pointer;">
+                            <i class="fa-solid fa-triangle-exclamation"></i>
+                            <div>
+                                <p class="olt-stat-label">Fallas Activas <i class="fa-solid fa-arrow-up-right-from-square" style="font-size:10px;opacity:0.7;"></i></p>
+                                <p id="olt-stat-fallas" class="olt-stat-val">—</p>
+                            </div>
+                        </div>
+                        <div class="olt-stat-card orange" id="olt-stat-cortes-card" title="Click para ver los Cortes Masivos de Línea" style="cursor:pointer;">
+                            <i class="fa-solid fa-bolt"></i>
+                            <div>
+                                <p class="olt-stat-label">Cortes Masivos <i class="fa-solid fa-arrow-up-right-from-square" style="font-size:10px;opacity:0.7;"></i></p>
+                                <p id="olt-stat-cortes" class="olt-stat-val">—</p>
+                            </div>
+                        </div>
+                        <div class="olt-stat-card yellow" id="olt-stat-err-card" title="Click para ver el detalle de OLTs con error o sin respuesta" style="cursor:pointer;">
+                            <i class="fa-solid fa-server"></i>
+                            <div>
+                                <p class="olt-stat-label">OLTs sin respuesta EMS <i class="fa-solid fa-circle-info" style="font-size:11px;"></i></p>
+                                <p id="olt-stat-err" class="olt-stat-val">—</p>
+                                <p id="olt-stat-err-hint" style="font-size:10px;color:#FBBC04;margin:0;"></p>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+                <!-- Banner EMS connectivity -->
+                <div id="olt-ems-banner" style="display:none; margin-bottom:10px; padding:10px 16px; border-radius:8px; border:1px solid rgba(234,67,53,0.4); background:rgba(234,67,53,0.08); font-size:13px;"></div>
+                <!-- Banner de estado del loop automático -->
+                <div id="olt-loop-status" style="display:none; margin-bottom:14px; padding:10px 16px; background:rgba(255,255,255,0.03); border-radius:8px; border:1px solid rgba(255,255,255,0.07); font-size:13px;"></div>
+
+                <!-- Tabs -->
+                <div class="olt-tabs" style="margin-bottom:14px;">
+                    <button class="olt-tab active" data-olt-tab="cliente">
+                        <i class="fa-solid fa-magnifying-glass"></i> Búsqueda de Cliente
+                    </button>
+                    <button class="olt-tab" data-olt-tab="cortes">
+                        <i class="fa-solid fa-bolt"></i> Caídas de Línea (Cortes)
+                    </button>
+                    <button class="olt-tab" data-olt-tab="resumen">
+                        <i class="fa-solid fa-chart-simple"></i> Resumen por OLT
+                    </button>
+                </div>
+
+                <!-- Tab: Búsqueda de Cliente -->
+                <div id="olt-tab-cliente" class="olt-tab-content card active">
+                    <h3 style="font-size:1rem;font-weight:600;margin:0 0 14px;">Búsqueda de Cliente</h3>
+                    <div style="display:flex;gap:8px;flex-wrap:wrap;margin-bottom:16px;">
+                        <input id="olt-client-search-input" type="text" class="filter-input-sm" placeholder="Cuenta (ej. 15_gftth_xxx), teléfono o nombre del cliente..." style="min-width:320px;flex:1;">
+                        <button id="btn-olt-client-search" class="btn-sm-blue"><i class="fa-solid fa-magnifying-glass"></i> Buscar</button>
+                    </div>
+                    <div id="olt-client-search-result">
+                        <p style="color:#9AA0A6;font-size:13px;">Busca un cliente para ver el estado de su ONU en la OLT en tiempo real (según el último escaneo continuo).</p>
+                    </div>
+                </div>
+
+                <!-- Tab: Cortes Masivos (Caídas de Línea) -->
+                <div id="olt-tab-cortes" class="olt-tab-content card" style="display:none;">
+                    <div style="display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:10px;margin-bottom:14px;">
+                        <h3 style="font-size:1rem;font-weight:600;margin:0;">Caídas de Línea (Cortes Masivos Detectados) — Agrupado por OLT</h3>
+                        <div style="display:flex;gap:8px;flex-wrap:wrap;">
+                            <select id="olt-cortes-filter-branch" class="filter-select-sm">
+                                <option value="">Todos los Branch</option>
+                            </select>
+                            <select id="olt-cortes-filter-tipo" class="filter-select-sm">
+                                <option value="">Todos los tipos</option>
+                                <option value="CORTE-LOS">Pérdida de potencia</option>
+                                <option value="CORTE-ENERGIA">Corte de energía</option>
+                            </select>
+                        </div>
+                    </div>
+                    <div class="table-responsive">
+                        <table class="data-table small-table" id="olt-cortes-table">
+                            <thead>
+                                <tr>
+                                    <th>Branch</th><th>OLT</th><th>IP</th><th>PUERTO</th><th>Tipo Corte</th>
+                                    <th>Hora Estimada</th><th>ONUs Afectadas</th>
+                                    <th>Causa</th><th>ONUs IDs</th>
+                                </tr>
+                            </thead>
+                            <tbody id="olt-cortes-body">
+                                <tr><td colspan="9" class="text-center" style="color:#9AA0A6;"><i class="fa-solid fa-spinner fa-spin"></i> Esperando primer escaneo automático...</td></tr>
+                            </tbody>
+                        </table>
+                    </div>
+                </div>
+
+                <!-- Tab: Resumen por OLT -->
+                <div id="olt-tab-resumen" class="olt-tab-content card" style="display:none;">
+                    <h3 style="font-size:1rem;font-weight:600;margin:0 0 14px;">Resumen por OLT</h3>
+                    <div class="table-responsive">
+                        <table class="data-table small-table" id="olt-resumen-table">
+                            <thead>
+                                <tr>
+                                    <th>OLT</th><th>IP</th>
+                                    <th class="text-center" style="color:#0B7A44;">OK</th>
+                                    <th class="text-center" style="color:#D93025;">LOS/Óptica</th>
+                                    <th class="text-center" style="color:#7A5900;">Energía</th>
+                                    <th class="text-center" style="color:#5B6577;">Inactivos</th>
+                                    <th class="text-center" style="color:#9B3FB0;">Error Puerto</th>
+                                </tr>
+                            </thead>
+                            <tbody id="olt-resumen-body">
+                                <tr><td colspan="7" class="text-center" style="color:#9AA0A6;">Sin datos.</td></tr>
+                            </tbody>
+                        </table>
+                    </div>
+                </div>
+            </div><!-- /page-olt -->
+
+            <!-- ==================== PÁGINA: KPI ==================== -->
+            <div id="page-kpi" class="page-section">
+                <div class="olt-header card" style="margin-bottom:20px;padding:20px 24px;">
+                    <div style="display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:12px;">
+                        <div class="kpi-period-toggle">
+                            <button class="kpi-period-btn active" data-kpi-period="monthly">Mensual</button>
+                            <button class="kpi-period-btn" data-kpi-period="weekly">Semanal</button>
+                        </div>
+                        <div style="display:flex;gap:10px;align-items:center;flex-wrap:wrap;">
+                            <select id="kpi-period-select" class="filter-select-sm" style="min-width:160px;"></select>
+                            <span id="kpi-reference-status" style="font-size:11px;color:#9AA0A6;"></span>
+                            <button id="btn-kpi-refresh-reference" class="btn-sm-blue" title="Vuelve a leer ZONAS/Staff/TWMS/Active customers del Sheet KPI 2026 (referencia, no los KPIs en sí)">
+                                <i class="fa-solid fa-arrows-rotate"></i> Actualizar referencia
+                            </button>
+                        </div>
+                    </div>
+                </div>
+
+                <div id="kpi-loading" style="text-align:center;padding:30px;color:#9AA0A6;"><i class="fa-solid fa-spinner fa-spin"></i> Calculando KPIs desde las WOs de GNOC...</div>
+
+                <div id="kpi-content" style="display:none;">
+                    <h3 id="kpi-summary-title" style="font-size:1.1rem;font-weight:700;margin:0 0 14px;"></h3>
+                    <section class="cards-grid" id="kpi-summary-grid" style="grid-template-columns: repeat(auto-fit, minmax(190px, 1fr)); margin-bottom:24px;"></section>
+
+                    <section class="charts-section mt-2" style="grid-template-columns: repeat(auto-fit, minmax(480px, 1fr)); margin-bottom:20px;">
+                        <div class="table-section card">
+                            <div class="table-header" style="border-bottom: 1px solid rgba(255,255,255,0.05); padding-bottom: 10px; margin-bottom: 10px;">
+                                <h2 id="kpi-branch-table-title" style="font-size:1.1rem;font-weight:600;"><i class="fa-solid fa-building-user" style="color:#4285F4;margin-right:8px;"></i></h2>
+                            </div>
+                            <div class="table-responsive">
+                                <table class="data-table small-table" style="font-size:12px;">
+                                    <thead>
+                                        <tr>
+                                            <th>Branch</th><th class="text-center">Total WO</th>
+                                            <th class="text-center">&lt; 24H</th><th class="text-center">&lt; 48H</th>
+                                            <th class="text-center">&lt; 72H</th><th class="text-center">Over</th>
+                                            <th class="text-center">Pending</th>
+                                        </tr>
+                                    </thead>
+                                    <tbody id="kpi-branch-table-body"></tbody>
+                                </table>
+                            </div>
+                        </div>
+
+                        <div class="table-section card">
+                            <div class="table-header" style="border-bottom: 1px solid rgba(255,255,255,0.05); padding-bottom: 10px; margin-bottom: 10px;">
+                                <h2 id="kpi-hours-table-title" style="font-size:1.1rem;font-weight:600;"><i class="fa-solid fa-clock" style="color:#F4B400;margin-right:8px;"></i></h2>
+                            </div>
+                            <div class="table-responsive">
+                                <table class="data-table small-table" style="font-size:12px;">
+                                    <thead><tr><th>Branch</th><th class="text-center">Sum Hours</th></tr></thead>
+                                    <tbody id="kpi-hours-table-body"></tbody>
+                                </table>
+                            </div>
+                        </div>
+                    </section>
+
+                    <section class="table-section card mt-2" style="margin-bottom:20px;">
+                        <div class="table-header" style="border-bottom: 1px solid rgba(255,255,255,0.05); padding-bottom: 10px; margin-bottom: 10px;">
+                            <h2 id="kpi-recurring-table-title" style="font-size:1.1rem;font-weight:600;"><i class="fa-solid fa-rotate" style="color:#AB47BC;margin-right:8px;"></i> Recurring Incidents Report</h2>
+                        </div>
+                        <div class="table-responsive">
+                            <table class="data-table small-table" style="font-size:12px;">
+                                <thead><tr><th>Branch</th><th class="text-center">Qty. Recurrings</th><th class="text-center">Recurring Rate</th></tr></thead>
+                                <tbody id="kpi-recurring-table-body"></tbody>
+                            </table>
+                        </div>
+                    </section>
+
+                    <h3 id="kpi-trend-title" style="font-size:1.1rem;font-weight:700;margin:28px 0 14px;">Tendencia Mensual <span style="font-weight:400;font-size:0.8rem;color:#9AA0A6;">(meses con datos locales completos)</span></h3>
+                    <section class="charts-section">
+                        <div class="chart-container card">
+                            <h3 id="kpi-trend-complains-title">WO Created by Month</h3>
+                            <div class="chart-wrapper"><canvas id="kpiTrendComplainsChart"></canvas></div>
+                        </div>
+                        <div class="chart-container card">
+                            <h3 id="kpi-trend-ksub-title">Ksub*min/10Ksub/month</h3>
+                            <div class="chart-wrapper"><canvas id="kpiTrendKsubMinChart"></canvas></div>
+                        </div>
+                        <div class="chart-container card">
+                            <h3>Incident Resolve On Time Rate</h3>
+                            <div class="chart-wrapper"><canvas id="kpiTrendOnTimeChart"></canvas></div>
+                        </div>
+                    </section>
+                </div>
+            </div><!-- /page-kpi -->
+
+            <!-- ==================== PÁGINA: DESPLIEGUES PENDIENTES ==================== -->
+            <div id="page-deploy-pending" class="page-section">
+                <div class="olt-header card" style="margin-bottom:20px;padding:20px 24px;">
+                    <div style="display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:12px;">
+                        <div>
+                            <p id="deploy-pending-status-line" style="margin:0;color:#9AA0A6;font-size:13px;"><i class="fa-solid fa-spinner fa-spin"></i> Cargando resumen de despliegues pendientes...</p>
+                        </div>
+                        <div style="display:flex;gap:8px;">
+                            <button id="btn-deploy-pending-cancel" class="btn-sync" style="display:none;background:#EA4335;border-color:#EA4335;">
+                                <i class="fa-solid fa-ban"></i>
+                                <span>Cancelar</span>
+                            </button>
+                            <button id="btn-deploy-pending-run" class="btn-sync" style="background:#F4B400;border-color:#F4B400;">
+                                <i class="fa-solid fa-arrows-rotate"></i>
+                                <span>Actualizar Despliegues</span>
+                            </button>
+                        </div>
+                    </div>
+                </div>
+
+                <section class="cards-grid" style="grid-template-columns: repeat(auto-fit, minmax(190px, 1fr)); margin-bottom:24px;">
+                    <div class="stat-card">
+                        <div class="card-icon blue"><i class="fa-solid fa-screwdriver-wrench"></i></div>
+                        <div class="card-data"><h3>Total Pendientes</h3><p id="dp-stat-total" class="value">—</p></div>
+                    </div>
+                    <div class="stat-card">
+                        <div class="card-icon green"><i class="fa-solid fa-clock"></i></div>
+                        <div class="card-data"><h3>Under 24h</h3><p id="dp-stat-under24" class="value">—</p></div>
+                    </div>
+                    <div class="stat-card">
+                        <div class="card-icon yellow"><i class="fa-solid fa-hourglass-half"></i></div>
+                        <div class="card-data"><h3>Over 24h / 48h</h3><p id="dp-stat-over2448" class="value">—</p></div>
+                    </div>
+                    <div class="stat-card">
+                        <div class="card-icon red"><i class="fa-solid fa-fire"></i></div>
+                        <div class="card-data"><h3>Over 72h</h3><p id="dp-stat-over72" class="value">—</p></div>
+                    </div>
+                    <div class="stat-card">
+                        <div class="card-icon purple"><i class="fa-solid fa-ban"></i></div>
+                        <div class="card-data"><h3>Cerrar WO</h3><p id="dp-stat-cerrar" class="value">—</p></div>
+                    </div>
+                </section>
+
+                <section class="table-section card mt-2" style="margin-bottom:20px;">
+                    <div class="table-header" style="border-bottom: 1px solid rgba(255,255,255,0.05); padding-bottom: 10px; margin-bottom: 10px;">
+                        <h2 style="font-size:1.1rem;font-weight:600;"><i class="fa-solid fa-building-user" style="color:#4285F4;margin-right:8px;"></i> Despliegues Pendientes por Branch</h2>
+                    </div>
+                    <div class="table-responsive">
+                        <table class="data-table small-table" style="font-size:12px;">
+                            <thead>
+                                <tr>
+                                    <th>Branch</th><th class="text-center">Total</th>
+                                    <th class="text-center">Under 24h</th><th class="text-center">Over 24h</th>
+                                    <th class="text-center">Over 48h</th><th class="text-center">Over 72h</th>
+                                    <th class="text-center">Cerrar WO</th>
+                                </tr>
+                            </thead>
+                            <tbody id="dp-branch-table-body">
+                                <tr><td colspan="7" class="text-center" style="color:#9AA0A6;">Cargando...</td></tr>
+                            </tbody>
+                        </table>
+                    </div>
+                </section>
+
+                <section class="table-section card mt-2">
+                    <div class="table-header" style="border-bottom: 1px solid rgba(255,255,255,0.05); padding-bottom: 10px; margin-bottom: 10px;display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:10px;">
+                        <h2 style="font-size:1.1rem;font-weight:600;margin:0;"><i class="fa-solid fa-users" style="color:#0F9D58;margin-right:8px;"></i> Clientes Pendientes</h2>
+                        <div style="display:flex;gap:8px;flex-wrap:wrap;">
+                            <input id="dp-filter-search" type="text" class="filter-input-sm" placeholder="Buscar cuenta, cliente, teléfono...">
+                            <select id="dp-filter-branch" class="filter-select-sm"><option value="">Todos los Branch</option></select>
+                            <select id="dp-filter-tipo" class="filter-select-sm">
+                                <option value="">Todos los tipos</option>
+                                <option value="Under 24h">Under 24h</option>
+                                <option value="Over 24h">Over 24h</option>
+                                <option value="Over 48h">Over 48h</option>
+                                <option value="Over 72h">Over 72h</option>
+                            </select>
+                        </div>
+                    </div>
+                    <div class="table-responsive">
+                        <table class="data-table small-table" style="font-size:12px;">
+                            <thead>
+                                <tr>
+                                    <th>Branch</th><th>Account</th><th>Cliente</th><th>Teléfono</th>
+                                    <th>Partner</th><th>Tipo</th><th class="text-center">Días Pendiente</th>
+                                    <th>Caja</th>
+                                </tr>
+                            </thead>
+                            <tbody id="dp-clients-table-body">
+                                <tr><td colspan="8" class="text-center" style="color:#9AA0A6;">Cargando...</td></tr>
+                            </tbody>
+                        </table>
+                    </div>
+                </section>
+            </div><!-- /page-deploy-pending -->
+
+            <!-- ==================== PÁGINA: CREDENCIALES ==================== -->
+            <div id="page-credentials" class="page-section">
+                <div class="cards-grid" style="grid-template-columns: repeat(auto-fit, minmax(340px, 1fr)); align-items: start;">
+                    <div class="card cred-card" data-system="gnoc">
+                        <h3><i class="fa-solid fa-server" style="color:#4285F4;margin-right:8px;"></i>GNOC</h3>
+                        <div class="cred-current">
+                            <span class="cred-label">Usuario actual</span>
+                            <span class="cred-username">Cargando...</span>
+                        </div>
+                        <div class="cred-current">
+                            <span class="cred-label">Contraseña</span>
+                            <span class="cred-pass-status">Cargando...</span>
+                        </div>
+                        <div class="cred-form">
+                            <label>Nuevo usuario <span class="cred-optional">(opcional)</span></label>
+                            <input type="text" class="cred-input cred-username-input" placeholder="Dejar vacío para no cambiar" autocomplete="off">
+                            <label>Nueva contraseña <span class="cred-optional">(opcional)</span></label>
+                            <input type="password" class="cred-input cred-password-input" placeholder="Dejar vacío para no cambiar" autocomplete="new-password">
+                            <button class="btn-sync cred-save-btn"><i class="fa-solid fa-floppy-disk"></i> <span>Guardar</span></button>
+                            <div class="cred-feedback"></div>
+                        </div>
+                    </div>
+
+                    <div class="card cred-card" data-system="tableau">
+                        <h3><i class="fa-solid fa-chart-simple" style="color:#FBBC05;margin-right:8px;"></i>Tableau</h3>
+                        <div class="cred-current">
+                            <span class="cred-label">Usuario actual</span>
+                            <span class="cred-username">Cargando...</span>
+                        </div>
+                        <div class="cred-current">
+                            <span class="cred-label">Contraseña</span>
+                            <span class="cred-pass-status">Cargando...</span>
+                        </div>
+                        <div class="cred-form">
+                            <label>Nuevo usuario <span class="cred-optional">(opcional)</span></label>
+                            <input type="text" class="cred-input cred-username-input" placeholder="Dejar vacío para no cambiar" autocomplete="off">
+                            <label>Nueva contraseña <span class="cred-optional">(opcional)</span></label>
+                            <input type="password" class="cred-input cred-password-input" placeholder="Dejar vacío para no cambiar" autocomplete="new-password">
+                            <button class="btn-sync cred-save-btn"><i class="fa-solid fa-floppy-disk"></i> <span>Guardar</span></button>
+                            <div class="cred-feedback"></div>
+                        </div>
+                    </div>
+
+                    <div class="card cred-card" data-system="cnoc">
+                        <h3><i class="fa-solid fa-globe" style="color:#34A853;margin-right:8px;"></i>CNOC</h3>
+                        <div class="cred-current">
+                            <span class="cred-label">Usuario actual</span>
+                            <span class="cred-username">Cargando...</span>
+                        </div>
+                        <div class="cred-current">
+                            <span class="cred-label">Contraseña</span>
+                            <span class="cred-pass-status">Cargando...</span>
+                        </div>
+                        <div class="cred-form">
+                            <label>Nuevo usuario <span class="cred-optional">(opcional)</span></label>
+                            <input type="text" class="cred-input cred-username-input" placeholder="Dejar vacío para no cambiar" autocomplete="off">
+                            <label>Nueva contraseña <span class="cred-optional">(opcional)</span></label>
+                            <input type="password" class="cred-input cred-password-input" placeholder="Dejar vacío para no cambiar" autocomplete="new-password">
+                            <button class="btn-sync cred-save-btn"><i class="fa-solid fa-floppy-disk"></i> <span>Guardar</span></button>
+                            <div class="cred-feedback"></div>
+                        </div>
+                    </div>
+
+                    <div class="card cred-card" data-system="tms">
+                        <h3><i class="fa-solid fa-signal" style="color:#EA4335;margin-right:8px;"></i>TMs</h3>
+                        <div class="cred-current">
+                            <span class="cred-label">Usuario actual</span>
+                            <span class="cred-username">Cargando...</span>
+                        </div>
+                        <div class="cred-current">
+                            <span class="cred-label">Contraseña</span>
+                            <span class="cred-pass-status">Cargando...</span>
+                        </div>
+                        <div class="cred-form">
+                            <label>Nuevo usuario <span class="cred-optional">(opcional)</span></label>
+                            <input type="text" class="cred-input cred-username-input" placeholder="Dejar vacío para no cambiar" autocomplete="off">
+                            <label>Nueva contraseña <span class="cred-optional">(opcional)</span></label>
+                            <input type="password" class="cred-input cred-password-input" placeholder="Dejar vacío para no cambiar" autocomplete="new-password">
+                            <button class="btn-sync cred-save-btn"><i class="fa-solid fa-floppy-disk"></i> <span>Guardar</span></button>
+                            <div class="cred-feedback"></div>
+                        </div>
+                    </div>
+
+                    <div class="card cred-card" data-system="nims">
+                        <h3><i class="fa-solid fa-server" style="color:#0B7A44;margin-right:8px;"></i>NIMS</h3>
+                        <div class="cred-current">
+                            <span class="cred-label">Usuario actual</span>
+                            <span class="cred-username">Cargando...</span>
+                        </div>
+                        <div class="cred-current">
+                            <span class="cred-label">Contraseña</span>
+                            <span class="cred-pass-status">Cargando...</span>
+                        </div>
+                        <div class="cred-form">
+                            <label>Nuevo usuario <span class="cred-optional">(opcional)</span></label>
+                            <input type="text" class="cred-input cred-username-input" placeholder="Dejar vacío para no cambiar" autocomplete="off">
+                            <label>Nueva contraseña <span class="cred-optional">(opcional)</span></label>
+                            <input type="password" class="cred-input cred-password-input" placeholder="Dejar vacío para no cambiar" autocomplete="new-password">
+                            <button class="btn-sync cred-save-btn"><i class="fa-solid fa-floppy-disk"></i> <span>Guardar</span></button>
+                            <div class="cred-feedback"></div>
+                        </div>
+                    </div>
+                </div>
+                <div class="foot-note-credentials">
+                    <i class="fa-solid fa-circle-info"></i>
+                    Si una sincronización falla porque la contraseña de alguno de estos sistemas cambió, el mensaje de error lo va a indicar explícitamente aquí para que la actualices.
+                </div>
+            </div><!-- /page-credentials -->
+
+                <div id="page-fbb-dashboard" class="page-section fbb-scope">
+                    <!-- KPI Cards Grid -->
+                    <div class="kpi-grid">
+                        <div class="kpi-card">
+                            <div class="kpi-icon"><i class="fa-solid fa-earth-americas"></i></div>
+                            <div class="kpi-info">
+                                <span class="kpi-label">Total Zonas</span>
+                                <h3 id="stat-total-zones" class="kpi-value">-</h3>
+                            </div>
+                        </div>
+                        <div class="kpi-card">
+                            <div class="kpi-icon"><i class="fa-solid fa-box"></i></div>
+                            <div class="kpi-info">
+                                <span class="kpi-label">Total Puertos</span>
+                                <h3 id="stat-total-ports" class="kpi-value">-</h3>
+                            </div>
+                        </div>
+                        <div class="kpi-card">
+                            <div class="kpi-icon text-success"><i class="fa-solid fa-users"></i></div>
+                            <div class="kpi-info">
+                                <span class="kpi-label">Clientes Activos</span>
+                                <h3 id="stat-active-cust" class="kpi-value">-</h3>
+                            </div>
+                        </div>
+                        <div class="kpi-card">
+                            <div class="kpi-icon text-warning"><i class="fa-solid fa-user-slash"></i></div>
+                            <div class="kpi-info">
+                                <span class="kpi-label">Clientes Suspendidos</span>
+                                <h3 id="stat-susp-cust" class="kpi-value">-</h3>
+                            </div>
+                        </div>
+                        <div class="kpi-card">
+                            <div class="kpi-icon text-danger"><i class="fa-solid fa-user-xmark"></i></div>
+                            <div class="kpi-info">
+                                <span class="kpi-label">Clientes Cancelados</span>
+                                <h3 id="stat-canc-cust" class="kpi-value">-</h3>
+                            </div>
+                        </div>
+                        <div class="kpi-card">
+                            <div class="kpi-icon text-info"><i class="fa-solid fa-gauge-high"></i></div>
+                            <div class="kpi-info">
+                                <span class="kpi-label">Saturación Promedio</span>
+                                <h3 id="stat-avg-sat" class="kpi-value">-</h3>
+                            </div>
+                        </div>
+                    </div>
+                    
+                    <!-- Charts & Insights Grid -->
+                    <div class="dashboard-grid">
+                        <div class="grid-item card chart-card">
+                            <div class="card-header">
+                                <h3><i class="fa-solid fa-chart-column"></i> Capacidad y Saturación por Sucursal</h3>
+                            </div>
+                            <div class="card-body">
+                                <div class="chart-container">
+                                    <canvas id="chart-branch-saturation"></canvas>
+                                </div>
+                            </div>
+                        </div>
+                        
+                        <div class="grid-item card chart-card">
+                            <div class="card-header" style="display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 8px; padding-top: 10px; padding-bottom: 10px;">
+                                <h3><i class="fa-solid fa-chart-column"></i> Cantidad de Clientes por Estado</h3>
+                                <div class="chart-filters" style="display: flex; gap: 8px;">
+                                    <select id="ratio-filter-branch" class="form-control form-control-xs" style="width: 100px; background-color: rgba(255,255,255,0.02); padding: 4px 8px; font-size: 11px; height: auto; border: 1px solid var(--border-color);">
+                                        <option value="">Sucursal</option>
+                                    </select>
+                                    <select id="ratio-filter-zone" class="form-control form-control-xs" style="width: 120px; background-color: rgba(255,255,255,0.02); padding: 4px 8px; font-size: 11px; height: auto; border: 1px solid var(--border-color);" disabled>
+                                        <option value="">Zona</option>
+                                    </select>
+                                </div>
+                            </div>
+                            <div class="card-body">
+                                <div class="chart-container">
+                                    <canvas id="chart-customer-ratio"></canvas>
+                                </div>
+                            </div>
+                        </div>
+                        
+                        <div class="grid-item card chart-card" style="grid-column: span 2;">
+                            <div class="card-header" style="display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 8px; padding-top: 10px; padding-bottom: 10px;">
+                                <h3><i class="fa-solid fa-chart-column"></i> Evolución de Puertos por Sucursal (100% Stacked)</h3>
+                                <div class="chart-filters" style="display: flex; gap: 8px;">
+                                    <select id="stacked-filter-branch" class="form-control form-control-xs" style="width: 100px; background-color: rgba(255,255,255,0.02); padding: 4px 8px; font-size: 11px; height: auto; border: 1px solid var(--border-color);">
+                                        <option value="">Sucursal</option>
+                                    </select>
+                                    <select id="stacked-filter-partner" class="form-control form-control-xs" style="width: 100px; background-color: rgba(255,255,255,0.02); padding: 4px 8px; font-size: 11px; height: auto; border: 1px solid var(--border-color);">
+                                        <option value="">Partner</option>
+                                    </select>
+                                </div>
+                            </div>
+                            <div class="card-body">
+                                <div class="chart-container">
+                                    <canvas id="chart-branch-capacity-stacked"></canvas>
+                                </div>
+                            </div>
+                        </div>
+
+                        <!-- Relación de Saturación y Cancelación por Sucursal -->
+                        <div class="grid-item card chart-card" style="grid-column: span 2;">
+                            <div class="card-header">
+                                <h3><i class="fa-solid fa-chart-line"></i> Relación de Saturación de Puertos y Cancelación por Sucursal</h3>
+                            </div>
+                            <div class="card-body">
+                                <div class="chart-container">
+                                    <canvas id="chart-branch-sat-cancel-ratio"></canvas>
+                                </div>
+                            </div>
+                        </div>
+                        <div class="grid-item card table-card">
+                            <div class="card-header">
+                                <h3><i class="fa-solid fa-triangle-exclamation text-danger"></i> Zonas Más Saturadas</h3>
+                            </div>
+                            <div class="card-body">
+                                <div class="table-responsive">
+                                    <table class="table">
+                                        <thead>
+                                            <tr>
+                                                <th>Zona</th>
+                                                <th>Sucursal</th>
+                                                <th>Saturación</th>
+                                                <th>Clientes Activos</th>
+                                                <th>Servicio</th>
+                                            </tr>
+                                        </thead>
+                                        <tbody id="critical-zones-table">
+                                            <!-- Dynamically filled -->
+                                        </tbody>
+                                    </table>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+                <div id="page-fbb-zones" class="page-section fbb-scope">
+                    <div class="card filter-card">
+                        <div class="filter-header">
+                            <h3><i class="fa-solid fa-sliders"></i> Filtros de Búsqueda</h3>
+                            <button id="add-zone-btn" class="btn btn-success"><i class="fa-solid fa-plus"></i> Nueva Zona</button>
+                        </div>
+                        <div class="filter-grid">
+                            <div class="form-group">
+                                <label for="zone-filter-search">Buscar</label>
+                                <div class="input-icon-wrapper">
+                                    <i class="fa-solid fa-magnifying-glass"></i>
+                                    <input type="text" id="zone-filter-search" placeholder="Zona, OLT, Site..." class="form-control">
+                                </div>
+                            </div>
+                            <div class="form-group">
+                                <label for="zone-filter-branch">Sucursal (Branch)</label>
+                                <select id="zone-filter-branch" class="form-control">
+                                    <option value="">Todas</option>
+                                    <!-- Options filled dynamically -->
+                                </select>
+                            </div>
+                            <div class="form-group">
+                                <label for="zone-filter-dept">Departamento</label>
+                                <select id="zone-filter-dept" class="form-control">
+                                    <option value="">Todos</option>
+                                    <!-- Options filled dynamically -->
+                                </select>
+                            </div>
+                        </div>
+                    </div>
+                    
+                    <div class="card table-card mt-4">
+                        <div class="card-header">
+                            <h3><i class="fa-solid fa-list"></i> Zonas Registradas</h3>
+                            <div class="pagination-info" id="zones-pagination-info">Mostrando - de - registros</div>
+                        </div>
+                        <div class="card-body">
+                            <div class="table-responsive">
+                                <table class="table table-hover">
+                                    <thead>
+                                        <tr>
+                                            <th class="sortable" data-col="zone">Zona <i class="fa-solid fa-sort"></i></th>
+                                            <th class="sortable" data-col="branch">Sucursal <i class="fa-solid fa-sort"></i></th>
+                                            <th class="sortable" data-col="saturation">% Sat. Puertos <i class="fa-solid fa-sort"></i></th>
+                                            <th class="sortable" data-col="percent_saturation">% Sat. Clientes <i class="fa-solid fa-sort"></i></th>
+                                            <th class="sortable" data-col="percent_cancel">% Cancelación <i class="fa-solid fa-sort"></i></th>
+                                            <th class="sortable" data-col="active_customers">Clientes <i class="fa-solid fa-sort"></i></th>
+                                            <th>Site Físico</th>
+                                            <th>OLT</th>
+                                            <th>Cajas</th>
+                                            <th class="sortable" data-col="status_service">Estado <i class="fa-solid fa-sort"></i></th>
+                                            <th>Acciones</th>
+                                        </tr>
+                                    </thead>
+                                    <tbody id="zones-table-body">
+                                        <!-- Dynamically filled -->
+                                    </tbody>
+                                </table>
+                            </div>
+                            
+                            <!-- Pagination Controls -->
+                            <div class="pagination-container" id="zones-pagination">
+                                <!-- Filled by JS -->
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+                <div id="page-fbb-boxes" class="page-section fbb-scope">
+                    <div class="card filter-card">
+                        <div class="filter-header">
+                            <h3><i class="fa-solid fa-sliders"></i> Filtros de Búsqueda</h3>
+                            <button id="add-box-btn" class="btn btn-success"><i class="fa-solid fa-plus"></i> Nueva Caja</button>
+                        </div>
+                        <div class="filter-grid">
+                            <div class="form-group">
+                                <label for="box-filter-search">Buscar</label>
+                                <div class="input-icon-wrapper">
+                                    <i class="fa-solid fa-magnifying-glass"></i>
+                                    <input type="text" id="box-filter-search" placeholder="Código de Nodo, Dirección..." class="form-control">
+                                </div>
+                            </div>
+                            <div class="form-group">
+                                <label for="box-filter-branch">Sucursal (Branch)</label>
+                                <select id="box-filter-branch" class="form-control">
+                                    <option value="">Todas</option>
+                                    <!-- Options filled dynamically -->
+                                </select>
+                            </div>
+                            <div class="form-group">
+                                <label for="box-filter-class">Clase de Caja</label>
+                                <select id="box-filter-class" class="form-control">
+                                    <option value="">Todas</option>
+                                    <!-- Options filled dynamically -->
+                                </select>
+                            </div>
+                            <div class="form-group">
+                                <label for="box-filter-zone">Zona</label>
+                                <input type="text" id="box-filter-zone" placeholder="Ej: ARE_Z01" class="form-control" list="box-zone-list" autocomplete="off">
+                                <datalist id="box-zone-list"></datalist>
+                            </div>
+                            <div class="form-group">
+                                <label for="box-filter-site">SITE</label>
+                                <input type="text" id="box-filter-site" placeholder="Ej: SITE_123" class="form-control" list="box-site-list" autocomplete="off">
+                                <datalist id="box-site-list"></datalist>
+                            </div>
+                        </div>
+                    </div>
+                    
+                    <div class="boxes-layout mt-4">
+                        <!-- Left Table column -->
+                        <div class="card table-card boxes-table-container">
+                            <div class="card-header">
+                                <h3><i class="fa-solid fa-box"></i> Cajas</h3>
+                                <div class="pagination-info" id="boxes-pagination-info">Mostrando - de - registros</div>
+                            </div>
+                            <div class="card-body">
+                                <div class="table-responsive">
+                                    <table class="table table-hover table-sm">
+                                        <thead>
+                                            <tr>
+                                                <th class="sortable" data-col="node_code">Cod. Nodo <i class="fa-solid fa-sort"></i></th>
+                                                <th class="sortable" data-col="zone">Zona <i class="fa-solid fa-sort"></i></th>
+                                                <th class="sortable" data-col="branch">Sucursal <i class="fa-solid fa-sort"></i></th>
+                                                <th class="sortable" data-col="site_logical">SITE <i class="fa-solid fa-sort"></i></th>
+                                                <th>Clase</th>
+                                                <th class="sortable" data-col="status_service">Estado <i class="fa-solid fa-sort"></i></th>
+                                                <th>Puertos Usados</th>
+                                                <th>Acciones</th>
+                                            </tr>
+                                        </thead>
+                                        <tbody id="boxes-table-body">
+                                            <!-- Dynamically filled -->
+                                        </tbody>
+                                    </table>
+                                </div>
+                                <div class="pagination-container" id="boxes-pagination">
+                                    <!-- Filled by JS -->
+                                </div>
+                            </div>
+                        </div>
+                        
+                        <!-- Right Map column -->
+                        <div class="card map-card">
+                            <div class="card-header">
+                                <h3><i class="fa-solid fa-map-location-dot"></i> Ubicación en Mapa (Leaflet)</h3>
+                                <div style="display: flex; gap: 8px;">
+                                    <button id="reset-map-btn" class="btn btn-secondary btn-xs"><i class="fa-solid fa-arrows-to-eye"></i> Centrar</button>
+                                    <button id="toggle-fullscreen-map-btn" class="btn btn-secondary btn-xs"><i class="fa-solid fa-expand"></i> Maximizar</button>
+                                </div>
+                            </div>
+                            <div class="card-body map-body">
+                                <div id="map"></div>
+                                <div id="map-fallback" class="map-placeholder">
+                                    <i class="fa-solid fa-map-location-dot fa-3x"></i>
+                                    <p class="mt-2">Selecciona una caja con coordenadas para ver su ubicación en el mapa.</p>
+                                </div>
+                            </div>
+                            <div class="map-controls-bar">
+                                <!-- Layer & Measure Toggles -->
+                                <div class="map-control-group">
+                                    <label class="toggle-label" style="cursor: pointer; display: inline-flex; align-items: center; gap: 6px; font-size: 13px; font-weight: 500; color: var(--color-text-main);">
+                                        <input type="checkbox" id="kml-toggle-checkbox" style="cursor: pointer;">
+                                        <span><i class="fa-solid fa-layer-group text-info"></i> Cobertura KML</span>
+                                    </label>
+                                    <label class="toggle-label" style="cursor: pointer; display: inline-flex; align-items: center; gap: 6px; font-size: 13px; font-weight: 500; color: var(--color-text-main); margin-left: 10px;">
+                                        <input type="checkbox" id="show-names-checkbox" style="cursor: pointer;">
+                                        <span><i class="fa-solid fa-tag text-warning"></i> Nombres en Mapa</span>
+                                    </label>
+                                    <button id="measure-tool-btn" class="btn btn-secondary btn-xs" style="margin-left: 10px;"><i class="fa-solid fa-ruler"></i> Medir Distancia</button>
+                                    <button id="measure-clear-btn" class="btn btn-danger btn-xs hidden"><i class="fa-solid fa-trash-can"></i> Limpiar</button>
+                                    <span id="measure-result" class="measure-text" style="font-size: 12px; font-weight: 600; color: var(--color-warning); margin-left: 8px;"></span>
+                                </div>
+                                <!-- Coordinates and Nearest Search -->
+                                <div class="map-control-group coordinates-search-group" style="display: flex; align-items: center; gap: 8px; margin-left: auto;">
+                                    <input type="text" id="manual-coordinates" placeholder="Lat, Lng (ej. -11.979557, -76.942322)" class="form-control form-control-xs" style="width: 240px; padding: 6px 10px; font-size: 12px; background-color: rgba(255,255,255,0.02);">
+                                    <button id="map-capture-btn" class="btn btn-secondary btn-xs" title="Capturar coordenadas haciendo clic en el mapa"><i class="fa-solid fa-crosshairs"></i> Capturar</button>
+                                    <button id="search-nearest-btn" class="btn btn-primary btn-xs"><i class="fa-solid fa-location-crosshairs"></i> Buscar 12 Cercanas</button>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+                <div id="page-fbb-staff" class="page-section fbb-scope">
+                    <div class="card filter-card">
+                        <div class="filter-header">
+                            <h3><i class="fa-solid fa-sliders"></i> Filtros de Búsqueda</h3>
+                            <div class="filter-header-buttons" style="display: flex; gap: 8px;">
+                                <button id="add-staff-btn" class="btn btn-success"><i class="fa-solid fa-plus"></i> Nuevo Personal</button>
+                                <button id="staff-export-btn" class="btn btn-info"><i class="fa-solid fa-download"></i> Descargar Plantilla</button>
+                                <button id="staff-import-btn" class="btn btn-secondary"><i class="fa-solid fa-upload"></i> Importar Datos</button>
+                                <input type="file" id="staff-import-file" accept=".csv" style="display: none;">
+                            </div>
+                        </div>
+                        <div class="filter-grid">
+                            <div class="form-group">
+                                <label for="staff-filter-search">Buscar</label>
+                                <div class="input-icon-wrapper">
+                                    <i class="fa-solid fa-magnifying-glass"></i>
+                                    <input type="text" id="staff-filter-search" placeholder="Nombre, OLT, Zona..." class="form-control">
+                                </div>
+                            </div>
+                            <div class="form-group">
+                                <label for="staff-filter-branch">Sucursal (Branch)</label>
+                                <select id="staff-filter-branch" class="form-control">
+                                    <option value="">Todas</option>
+                                </select>
+                            </div>
+                            <div class="form-group">
+                                <label for="staff-filter-partner">Socio (Partner)</label>
+                                <select id="staff-filter-partner" class="form-control">
+                                    <option value="">Todos</option>
+                                </select>
+                            </div>
+                        </div>
+                    </div>
+                    
+                    <div class="card table-card mt-4">
+                        <div class="card-header">
+                            <h3><i class="fa-solid fa-users-gear"></i> Asignaciones de Personal</h3>
+                            <div class="pagination-info" id="staff-pagination-info">Mostrando - de - registros</div>
+                        </div>
+                        <div class="card-body">
+                            <div class="table-responsive">
+                                <table class="table table-hover">
+                                    <thead>
+                                        <tr>
+                                            <th class="sortable" data-col="staff_team">Equipo Staff <i class="fa-solid fa-sort"></i></th>
+                                            <th class="sortable" data-col="zone">Zona <i class="fa-solid fa-sort"></i></th>
+                                            <th class="sortable" data-col="branch">Sucursal <i class="fa-solid fa-sort"></i></th>
+                                            <th class="sortable" data-col="partner">Socio / Partner <i class="fa-solid fa-sort"></i></th>
+                                            <th class="sortable" data-col="vtp_username">Usuario VTP <i class="fa-solid fa-sort"></i></th>
+                                            <th class="sortable" data-col="olt">OLT <i class="fa-solid fa-sort"></i></th>
+                                            <th class="sortable" data-col="partner_incidence">Socio Incidencia <i class="fa-solid fa-sort"></i></th>
+                                            <th>Acciones</th>
+                                        </tr>
+                                    </thead>
+                                    <tbody id="staff-table-body">
+                                        <!-- Dynamically filled -->
+                                    </tbody>
+                                </table>
+                            </div>
+                            
+                            <!-- Pagination Controls -->
+                            <div class="pagination-container" id="staff-pagination">
+                                <!-- Filled by JS -->
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+                <div id="page-fbb-partner-capacity" class="page-section fbb-scope">
+                    <!-- Table 1: Consolidated Partner Capacity by Branch -->
+                    <div class="card table-card">
+                        <div class="card-header">
+                            <h3><i class="fa-solid fa-people-carry-box"></i> Resumen de Capacidad por Socio y Sucursal</h3>
+                        </div>
+                        <div class="card-body">
+                            <div class="table-responsive">
+                                <table class="table table-hover">
+                                    <thead>
+                                        <tr>
+                                            <th>Sucursal</th>
+                                            <th>Socio / Partner</th>
+                                            <th>OLTs Atendidas</th>
+                                            <th>Clientes Activos</th>
+                                            <th>Equipos Totales</th>
+                                            <th>Personal (FT)</th>
+                                            <th>Equipos Despliegue</th>
+                                            <th>Equipos Incidencias</th>
+                                            <th>Equipos ODN</th>
+                                            <th>Sat. Promedio</th>
+                                        </tr>
+                                    </thead>
+                                    <tbody id="partner-capacity-table-body">
+                                        <!-- Dynamically filled -->
+                                    </tbody>
+                                </table>
+                            </div>
+                        </div>
+                    </div>
+                    
+                    <!-- Table 2: Detailed Zone Load & Ratios -->
+                    <div class="card table-card mt-4">
+                        <div class="card-header">
+                            <h3><i class="fa-solid fa-chart-line"></i> Análisis de Carga por Zona (Despliegue)</h3>
+                        </div>
+                        <div class="card-body">
+                            <div class="table-responsive">
+                                <table class="table table-hover">
+                                    <thead>
+                                        <tr>
+                                            <th>Zona</th>
+                                            <th>Sucursal</th>
+                                            <th>Clientes Activos</th>
+                                            <th>% Sat. Puertos</th>
+                                            <th>% Sat. Clientes</th>
+                                            <th>% Cancelación</th>
+                                            <th>Socio Despliegue</th>
+                                            <th>Equipos Despliegue</th>
+                                            <th>Clientes / Equipo</th>
+                                            <th>Estado Carga</th>
+                                        </tr>
+                                    </thead>
+                                    <tbody id="zone-capacity-table-body">
+                                        <!-- Dynamically filled -->
+                                    </tbody>
+                                </table>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+                <div id="page-fbb-incidents" class="page-section fbb-scope">
+                    <div class="card filter-card">
+                        <div class="filter-header">
+                            <h3><i class="fa-solid fa-sliders"></i> Filtros de Incidentes</h3>
+                        </div>
+                        <div class="filter-grid" style="grid-template-columns: repeat(4, 1fr); gap: 16px;">
+                            <div class="form-group">
+                                <label for="incidents-filter-branch">Sucursal (Branch)</label>
+                                <select id="incidents-filter-branch" class="form-control">
+                                    <option value="">Todas</option>
+                                    <!-- Options filled dynamically -->
+                                </select>
+                            </div>
+                            <div class="form-group">
+                                <label for="incidents-filter-month">Mes / Año</label>
+                                <select id="incidents-filter-month" class="form-control">
+                                    <option value="">Todos los meses</option>
+                                    <!-- Options filled dynamically -->
+                                </select>
+                            </div>
+                            <div class="form-group">
+                                <label for="incidents-filter-week">Semana</label>
+                                <select id="incidents-filter-week" class="form-control">
+                                    <option value="">Todas las semanas</option>
+                                    <!-- Options filled dynamically -->
+                                </select>
+                            </div>
+                            <div class="form-group">
+                                <label for="incidents-filter-site">Estación / Site</label>
+                                <select id="incidents-filter-site" class="form-control">
+                                    <option value="">Todos los Sites</option>
+                                    <!-- Options filled dynamically -->
+                                </select>
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- KPI Cards Grid -->
+                    <div class="kpi-grid mt-4">
+                        <div class="kpi-card">
+                            <div class="kpi-icon text-danger"><i class="fa-solid fa-triangle-exclamation"></i></div>
+                            <div class="kpi-info">
+                                <span class="kpi-label">Total Incidentes</span>
+                                <h3 id="incidents-stat-total" class="kpi-value">-</h3>
+                            </div>
+                        </div>
+                        <div class="kpi-card">
+                            <div class="kpi-icon text-warning"><i class="fa-solid fa-users-line"></i></div>
+                            <div class="kpi-info">
+                                <span class="kpi-label">Clientes Afectados</span>
+                                <h3 id="incidents-stat-clients" class="kpi-value">-</h3>
+                            </div>
+                        </div>
+                        <div class="kpi-card">
+                            <div class="kpi-icon text-info"><i class="fa-solid fa-circle-info"></i></div>
+                            <div class="kpi-info">
+                                <span class="kpi-label">Avería Más Frecuente</span>
+                                <h3 id="incidents-stat-frequent" class="kpi-value" style="font-size: 16px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; max-width: 200px;">-</h3>
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- Dashboard Grid for charts & tables -->
+                    <div class="dashboard-grid mt-4">
+                        <!-- Chart 1: Failure types comparison (non-stacked horizontal) -->
+                        <div class="grid-item card chart-card" style="grid-column: span 2;">
+                            <div class="card-header">
+                                <h3><i class="fa-solid fa-chart-bar"></i> Comparación de Tipos de Avería (Filtro Activo)</h3>
+                            </div>
+                            <div class="card-body">
+                                <div class="chart-container" style="height: 450px;">
+                                    <canvas id="chart-incidents-types-comparison"></canvas>
+                                </div>
+                            </div>
+                        </div>
+
+                        <!-- Chart 2: Site failure types horizontal stacked -->
+                        <div class="grid-item card chart-card" style="grid-column: span 2;">
+                            <div class="card-header">
+                                <h3><i class="fa-solid fa-chart-bar"></i> Distribución de Averías por Site (Top 10 Sites)</h3>
+                            </div>
+                            <div class="card-body">
+                                <div class="chart-container" style="height: 450px;">
+                                    <canvas id="chart-incidents-site"></canvas>
+                                </div>
+                            </div>
+                        </div>
+
+                        <!-- Failure Types Table -->
+                        <div class="grid-item card table-card">
+                            <div class="card-header">
+                                <h3><i class="fa-solid fa-bug"></i> Tipos de Averías (Recurrentes)</h3>
+                            </div>
+                            <div class="card-body">
+                                <div class="table-responsive">
+                                    <table class="table">
+                                        <thead>
+                                            <tr>
+                                                <th>Tipo de Avería</th>
+                                                <th>Cantidad</th>
+                                                <th>Porcentaje</th>
+                                            </tr>
+                                        </thead>
+                                        <tbody id="incidents-types-table-body">
+                                            <!-- Dynamically filled -->
+                                        </tbody>
+                                    </table>
+                                </div>
+                            </div>
+                        </div>
+
+                        <!-- Sites Ranking Table -->
+                        <div class="grid-item card table-card">
+                            <div class="card-header">
+                                <h3><i class="fa-solid fa-ranking-star"></i> Top 15 Sites con Más Incidencias</h3>
+                            </div>
+                            <div class="card-body">
+                                <div class="table-responsive">
+                                    <table class="table">
+                                        <thead>
+                                            <tr>
+                                                <th>Site</th>
+                                                <th>Total Incidentes</th>
+                                                <th>Clientes Afectados</th>
+                                            </tr>
+                                        </thead>
+                                        <tbody id="incidents-ranking-table-body">
+                                            <!-- Dynamically filled -->
+                                        </tbody>
+                                    </table>
+                                </div>
+                            </div>
+                        </div>
+                    <!-- New Section: Outages & Cancellations Correlation Report -->
+                    <div style="grid-column: span 2; border-top: 1px solid var(--border-color); margin-top: 32px; padding-top: 24px; width: 100%;">
+                        <h2 style="font-family: var(--font-title); font-size: 20px; font-weight: 700; color: var(--color-primary); margin-bottom: 8px;">
+                            <i class="fa-solid fa-network-wired text-danger"></i> Reporte de Cortes Físicos por Site (FTTH)
+                        </h2>
+                        <p style="color: var(--color-text-muted); font-size: 13px; margin-bottom: 24px;">
+                            Análisis correlativo entre cortes de energía por site, cortes de ODN (puertos de la OLT caídos) y llamadas de reclamo de clientes (WOs).
+                        </p>
+                    </div>
+
+                    <!-- Outages KPIs -->
+                    <div class="kpi-grid" style="width: 100%; grid-column: span 2;">
+                        <div class="kpi-card">
+                            <div class="kpi-icon text-danger"><i class="fa-solid fa-bolt-lightning"></i></div>
+                            <div class="kpi-info">
+                                <span class="kpi-label">Cortes de Energía</span>
+                                <h3 id="outages-stat-energy-cuts" class="kpi-value">-</h3>
+                            </div>
+                        </div>
+                        <div class="kpi-card">
+                            <div class="kpi-icon text-danger" style="opacity: 0.8;"><i class="fa-solid fa-plug-circle-xmark"></i></div>
+                            <div class="kpi-info">
+                                <span class="kpi-label">Afectados Energía</span>
+                                <h3 id="outages-stat-energy-affected" class="kpi-value">-</h3>
+                            </div>
+                        </div>
+                        <div class="kpi-card">
+                            <div class="kpi-icon text-warning"><i class="fa-solid fa-signal"></i></div>
+                            <div class="kpi-info">
+                                <span class="kpi-label">Cortes ODN / Fibra</span>
+                                <h3 id="outages-stat-odn-cuts" class="kpi-value">-</h3>
+                            </div>
+                        </div>
+                        <div class="kpi-card">
+                            <div class="kpi-icon text-warning" style="opacity: 0.8;"><i class="fa-solid fa-house-laptop"></i></div>
+                            <div class="kpi-info">
+                                <span class="kpi-label">Afectados ODN / Fibra</span>
+                                <h3 id="outages-stat-odn-affected" class="kpi-value">-</h3>
+                            </div>
+                        </div>
+                        <div class="kpi-card">
+                            <div class="kpi-icon text-info"><i class="fa-solid fa-headset"></i></div>
+                            <div class="kpi-info">
+                                <span class="kpi-label">Averías con WO</span>
+                                <h3 id="outages-stat-wos" class="kpi-value">-</h3>
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- Outages Graphs Grid -->
+                    <div class="dashboard-grid mt-4" style="width: 100%; grid-column: span 2;">
+                        <!-- Chart 1: Outages vs Calls -->
+                        <div class="grid-item card chart-card" style="grid-column: span 2;">
+                            <div class="card-header">
+                                <h3><i class="fa-solid fa-chart-bar"></i> Comparación Cortes Energía vs Cortes ODN vs WOs por Site (Top Sites)</h3>
+                            </div>
+                            <div class="card-body">
+                                <div class="chart-container" style="height: 340px;">
+                                    <canvas id="chart-outages-cancellations-comparison"></canvas>
+                                </div>
+                            </div>
+                        </div>
+
+                        <!-- Chart 2: Outage Causes breakdown -->
+                        <div class="grid-item card chart-card" style="grid-column: span 2;">
+                            <div class="card-header">
+                                <h3><i class="fa-solid fa-circle-exclamation"></i> Causas de Caídas Físicas (Clientes Afectados)</h3>
+                            </div>
+                            <div class="card-body">
+                                <div class="chart-container" style="height: 340px;">
+                                    <canvas id="chart-outage-causes"></canvas>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- Detailed Table -->
+                    <div class="grid-item card table-card mt-4" style="width: 100%; grid-column: span 2;">
+                        <div class="card-header" style="display: flex; justify-content: space-between; align-items: center;">
+                            <h3><i class="fa-solid fa-table"></i> Detalle de Estabilidad de Cortes Físicos por Site</h3>
+                            <span class="pagination-info" style="font-size: 12px; color: var(--color-text-muted);">Haga clic en los encabezados para ordenar</span>
+                        </div>
+                        <div class="card-body">
+                            <div class="table-responsive">
+                                <table class="table table-hover" id="outages-detailed-table">
+                                    <thead>
+                                        <tr>
+                                            <th style="cursor: pointer;" onclick="sortOutagesTable('site')">Site <i class="fa-solid fa-sort"></i></th>
+                                            <th style="cursor: pointer;" onclick="sortOutagesTable('branch')">Sucursal <i class="fa-solid fa-sort"></i></th>
+                                            <th style="cursor: pointer;" onclick="sortOutagesTable('month_year')">Mes <i class="fa-solid fa-sort"></i></th>
+                                            <th style="cursor: pointer;" onclick="sortOutagesTable('energy_cuts')">Cortes Energía <i class="fa-solid fa-sort"></i></th>
+                                            <th style="cursor: pointer;" onclick="sortOutagesTable('energy_affected')">Afectados Energía <i class="fa-solid fa-sort"></i></th>
+                                            <th style="cursor: pointer;" onclick="sortOutagesTable('odn_cuts')">Cortes ODN <i class="fa-solid fa-sort"></i></th>
+                                            <th style="cursor: pointer;" onclick="sortOutagesTable('odn_affected')">Afectados ODN <i class="fa-solid fa-sort"></i></th>
+                                            <th style="cursor: pointer;" onclick="sortOutagesTable('total_wos')">WOs (Reclamos) <i class="fa-solid fa-sort"></i></th>
+                                        </tr>
+                                    </thead>
+                                    <tbody id="outages-table-body">
+                                        <!-- Dynamically filled -->
+                                    </tbody>
+                                </table>
+                            </div>
+                        </div>
+                    </div>
+                    </div>
+                </div>
+
+                <div id="page-fbb-deployments" class="page-section fbb-scope">
+                    <div class="card filter-card">
+                        <div class="filter-header">
+                            <h3><i class="fa-solid fa-sliders"></i> Filtros de Despliegues</h3>
+                        </div>
+                        <div class="filter-grid" style="grid-template-columns: repeat(2, 1fr); gap: 16px;">
+                            <div class="form-group">
+                                <label for="deployments-filter-branch">Sucursal (Branch)</label>
+                                <select id="deployments-filter-branch" class="form-control">
+                                    <option value="">Todas</option>
+                                    <!-- Options filled dynamically -->
+                                </select>
+                            </div>
+                            <div class="form-group">
+                                <label for="deployments-filter-month">Mes / Año</label>
+                                <select id="deployments-filter-month" class="form-control">
+                                    <option value="">Todos los meses</option>
+                                    <!-- Options filled dynamically -->
+                                </select>
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- Operational Capacity & SLA KPIs -->
+                    <div class="kpi-grid mt-4" style="width: 100%;">
+                        <div class="kpi-card">
+                            <div class="kpi-icon text-primary"><i class="fa-solid fa-truck-fast"></i></div>
+                            <div class="kpi-info">
+                                <span class="kpi-label">Tareas de Despliegue</span>
+                                <h3 id="deployments-stat-total" class="kpi-value">-</h3>
+                            </div>
+                        </div>
+                        <div class="kpi-card">
+                            <div class="kpi-icon text-success"><i class="fa-solid fa-clock"></i></div>
+                            <div class="kpi-info">
+                                <span class="kpi-label">Eficiencia SLA (<24H)</span>
+                                <h3 id="deployments-stat-sla24" class="kpi-value">-</h3>
+                            </div>
+                        </div>
+                        <div class="kpi-card">
+                            <div class="kpi-icon text-warning"><i class="fa-solid fa-people-group"></i></div>
+                            <div class="kpi-info">
+                                <span class="kpi-label">Equipos de Despliegue</span>
+                                <h3 id="deployments-stat-teams" class="kpi-value">-</h3>
+                            </div>
+                        </div>
+                        <div class="kpi-card">
+                            <div class="kpi-icon text-info"><i class="fa-solid fa-user-shield"></i></div>
+                            <div class="kpi-info">
+                                <span class="kpi-label">Personal Técnico Total</span>
+                                <h3 id="deployments-stat-techs" class="kpi-value">-</h3>
+                            </div>
+                        </div>
+                        <div class="kpi-card">
+                            <div class="kpi-icon text-purple" style="color: #c084fc;"><i class="fa-solid fa-map-location-dot"></i></div>
+                            <div class="kpi-info">
+                                <span class="kpi-label">Zonas Atendidas</span>
+                                <h3 id="deployments-stat-zones" class="kpi-value">-</h3>
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- Operational Ratios -->
+                    <div class="kpi-grid mt-4" style="width: 100%;">
+                        <div class="kpi-card" style="border-left: 4px solid var(--color-warning);">
+                            <div class="kpi-info">
+                                <span class="kpi-label">Carga (Tareas / Equipo)</span>
+                                <h3 id="deployments-ratio-tasks-team" class="kpi-value" style="font-size: 20px;">-</h3>
+                            </div>
+                        </div>
+                        <div class="kpi-card" style="border-left: 4px solid var(--color-primary);">
+                            <div class="kpi-info">
+                                <span class="kpi-label">Cobertura (Zonas / Equipo)</span>
+                                <h3 id="deployments-ratio-zones-team" class="kpi-value" style="font-size: 20px;">-</h3>
+                            </div>
+                        </div>
+                        <div class="kpi-card" style="border-left: 4px solid var(--color-success);">
+                            <div class="kpi-info">
+                                <span class="kpi-label">Staffing (Técnicos / Zona)</span>
+                                <h3 id="deployments-ratio-techs-zone" class="kpi-value" style="font-size: 20px;">-</h3>
+                            </div>
+                        </div>
+                        <div class="kpi-card" style="border-left: 4px solid var(--color-danger);">
+                            <div class="kpi-info">
+                                <span class="kpi-label">T. Promedio Cierre</span>
+                                <h3 id="deployments-ratio-avg-time" class="kpi-value" style="font-size: 20px;">-</h3>
+                            </div>
+                        </div>
+                        <div class="kpi-card" style="border-left: 4px solid #a855f7;">
+                            <div class="kpi-info">
+                                <span class="kpi-label">Despl. / Día / Equipo</span>
+                                <h3 id="deployments-ratio-tasks-day-team" class="kpi-value" style="font-size: 20px;">-</h3>
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- Dynamic Bottleneck & SLA Analysis Card -->
+                    <div class="card mt-4" style="width: 100%;">
+                        <div class="card-header">
+                            <h3><i class="fa-solid fa-brain text-success"></i> Análisis y Diagnóstico de Capacidad Operativa</h3>
+                        </div>
+                        <div class="card-body" id="deployments-analysis-content" style="font-size: 13px; line-height: 1.6; color: var(--color-text);">
+                            Cargando análisis de capacidad...
+                        </div>
+                    </div>
+
+                    <!-- Deployment Charts -->
+                    <div class="dashboard-grid mt-4">
+                        <!-- Chart 1: Partner Efficiency Horizontal Bar Chart -->
+                        <div class="grid-item card chart-card" style="grid-column: span 2;">
+                            <div class="card-header">
+                                <h3><i class="fa-solid fa-chart-bar"></i> Eficiencia por Partner (Atención <24H)</h3>
+                            </div>
+                            <div class="card-body">
+                                <div class="chart-container" style="height: 380px;">
+                                    <canvas id="chart-deployments-partner-efficiency"></canvas>
+                                </div>
+                            </div>
+                        </div>
+
+                        <!-- Chart 2: Workload vs Efficiency Dual Axis Chart -->
+                        <div class="grid-item card chart-card" style="grid-column: span 2;">
+                            <div class="card-header">
+                                <h3><i class="fa-solid fa-chart-line"></i> Relación Carga de Trabajo (Tareas/Equipo) vs Eficiencia por Partner</h3>
+                            </div>
+                            <div class="card-body">
+                                <div class="chart-container" style="height: 380px;">
+                                    <canvas id="chart-deployments-workload-vs-efficiency"></canvas>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- Detailed Deployment Table -->
+                    <div class="grid-item card table-card mt-4" style="width: 100%; grid-column: span 2;">
+                        <div class="card-header" style="display: flex; justify-content: space-between; align-items: center;">
+                            <h3><i class="fa-solid fa-table"></i> Detalle de Capacidad Operativa y Eficiencia por Partner/Sucursal</h3>
+                            <span class="pagination-info" style="font-size: 12px; color: var(--color-text-muted);">Haga clic en los encabezados para ordenar</span>
+                        </div>
+                        <div class="card-body">
+                            <div class="table-responsive">
+                                <table class="table table-hover" id="deployments-detailed-table">
+                                    <thead>
+                                        <tr>
+                                            <th style="cursor: pointer;" onclick="sortDeploymentsTable('partner')">Partner <i class="fa-solid fa-sort"></i></th>
+                                            <th style="cursor: pointer;" onclick="sortDeploymentsTable('branch')">Sucursal <i class="fa-solid fa-sort"></i></th>
+                                            <th style="cursor: pointer;" onclick="sortDeploymentsTable('total_tasks')">Tareas <i class="fa-solid fa-sort"></i></th>
+                                            <th style="cursor: pointer;" onclick="sortDeploymentsTable('sla_24h_pct')">SLA <24h <i class="fa-solid fa-sort"></i></th>
+                                            <th style="cursor: pointer;" onclick="sortDeploymentsTable('sla_48h_pct')">SLA <48h <i class="fa-solid fa-sort"></i></th>
+                                            <th style="cursor: pointer;" onclick="sortDeploymentsTable('teams_deploy')">Equipos Despl. <i class="fa-solid fa-sort"></i></th>
+                                            <th style="cursor: pointer;" onclick="sortDeploymentsTable('ft_total')">Técnicos <i class="fa-solid fa-sort"></i></th>
+                                            <th style="cursor: pointer;" onclick="sortDeploymentsTable('tasks_per_team')">Tareas / Equipo <i class="fa-solid fa-sort"></i></th>
+                                            <th style="cursor: pointer;" onclick="sortDeploymentsTable('zones_per_team')">Zonas / Equipo <i class="fa-solid fa-sort"></i></th>
+                                            <th style="cursor: pointer;" onclick="sortDeploymentsTable('techs_per_zone')">Técnicos / Zona <i class="fa-solid fa-sort"></i></th>
+                                            <th style="cursor: pointer;" onclick="sortDeploymentsTable('avg_close_time_hrs')">T. Promedio (Hrs) <i class="fa-solid fa-sort"></i></th>
+                                            <th style="cursor: pointer;" onclick="sortDeploymentsTable('deployments_per_day_per_team')">Despl. / Día / Equipo <i class="fa-solid fa-sort"></i></th>
+                                        </tr>
+                                    </thead>
+                                    <tbody id="deployments-table-body">
+                                        <!-- Dynamically filled -->
+                                    </tbody>
+                                </table>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+        </main>
+    </div>
+
+    <div class="fbb-scope">
+    <div id="zone-modal" class="modal-overlay">
+        <div class="modal-content modal-lg">
+            <div class="modal-header">
+                <h3 id="zone-modal-title">Agregar Nueva Zona</h3>
+                <button class="modal-close"><i class="fa-solid fa-xmark"></i></button>
+            </div>
+            <div class="modal-body">
+                <form id="zone-form">
+                    <input type="hidden" id="zone-form-id">
+                    
+                    <div class="form-row">
+                        <div class="form-group col-md-4">
+                            <label for="zf-zone">Nombre de la Zona*</label>
+                            <input type="text" id="zf-zone" class="form-control" required placeholder="Ej: ARE_Z01">
+                        </div>
+                        <div class="form-group col-md-4">
+                            <label for="zf-branch">Sucursal (Branch)*</label>
+                            <input type="text" id="zf-branch" class="form-control" required placeholder="Ej: ARE">
+                        </div>
+                        <div class="form-group col-md-4">
+                            <label for="zf-saturation">Saturación (0-100%)</label>
+                            <input type="number" id="zf-saturation" class="form-control" min="0" max="100" step="0.01" placeholder="Ej: 15.23">
+                        </div>
+                    </div>
+                    
+                    <div class="form-row">
+                        <div class="form-group col-md-4">
+                            <label for="zf-active">Clientes Activos</label>
+                            <input type="number" id="zf-active" class="form-control" min="0" placeholder="0">
+                        </div>
+                        <div class="form-group col-md-4">
+                            <label for="zf-suspended">Clientes Suspendidos</label>
+                            <input type="number" id="zf-suspended" class="form-control" min="0" placeholder="0">
+                        </div>
+                        <div class="form-group col-md-4">
+                            <label for="zf-canceled">Clientes Cancelados</label>
+                            <input type="number" id="zf-canceled" class="form-control" min="0" placeholder="0">
+                        </div>
+                    </div>
+                    
+                    <div class="form-row">
+                        <div class="form-group col-md-4">
+                            <label for="zf-site-phys">Site Físico</label>
+                            <input type="text" id="zf-site-phys" class="form-control">
+                        </div>
+                        <div class="form-group col-md-4">
+                            <label for="zf-site-log">Site Lógico</label>
+                            <input type="text" id="zf-site-log" class="form-control">
+                        </div>
+                        <div class="form-group col-md-4">
+                            <label for="zf-olt">OLT</label>
+                            <input type="text" id="zf-olt" class="form-control">
+                        </div>
+                    </div>
+                    
+                    <div class="form-row">
+                        <div class="form-group col-md-4">
+                            <label for="zf-infrastructure">Tipo de Infraestructura</label>
+                            <input type="text" id="zf-infrastructure" class="form-control" placeholder="Ej: FTTH">
+                        </div>
+                        <div class="form-group col-md-4">
+                            <label for="zf-status">Estado del Servicio</label>
+                            <select id="zf-status" class="form-control">
+                                <option value="Online">Online</option>
+                                <option value="Offline">Offline</option>
+                                <option value="Pending">Pending</option>
+                            </select>
+                        </div>
+                        <div class="form-group col-md-4">
+                            <label for="zf-boxes-count">Cantidad de Cajas</label>
+                            <input type="number" id="zf-boxes-count" class="form-control" min="0" placeholder="0">
+                        </div>
+                    </div>
+                    
+                    <div class="form-row">
+                        <div class="form-group col-md-4">
+                            <label for="zf-dept">Departamento</label>
+                            <input type="text" id="zf-dept" class="form-control">
+                        </div>
+                        <div class="form-group col-md-4">
+                            <label for="zf-province">Provincia</label>
+                            <input type="text" id="zf-province" class="form-control">
+                        </div>
+                        <div class="form-group col-md-4">
+                            <label for="zf-district">Distrito</label>
+                            <input type="text" id="zf-district" class="form-control">
+                        </div>
+                    </div>
+                    
+                    <div class="form-group">
+                        <label for="zf-note">Notas</label>
+                        <textarea id="zf-note" class="form-control" rows="2"></textarea>
+                    </div>
+                    
+                    <!-- Assigned Staff Info Section -->
+                    <div class="mt-4 pt-3" style="border-top: 1px solid var(--border-color);">
+                        <h4 style="font-family: var(--font-title); font-size:15px; font-weight:600; margin-bottom:12px; color: var(--color-primary);">
+                            <i class="fa-solid fa-users-gear"></i> Personal / Staff Asignado a esta Zona (Solo Consulta)
+                        </h4>
+                        <div class="form-row">
+                            <div class="form-group col-md-6">
+                                <label>Equipo Staff</label>
+                                <input type="text" id="zf-staff-team" class="form-control" readonly style="background-color:rgba(255,255,255,0.01); border-style:dashed;">
+                            </div>
+                            <div class="form-group col-md-6">
+                                <label>Usuario VTP</label>
+                                <input type="text" id="zf-staff-vtp" class="form-control" readonly style="background-color:rgba(255,255,255,0.01); border-style:dashed;">
+                            </div>
+                        </div>
+                        <div class="form-row">
+                            <div class="form-group col-md-6">
+                                <label>Socio / Partner</label>
+                                <input type="text" id="zf-staff-partner" class="form-control" readonly style="background-color:rgba(255,255,255,0.01); border-style:dashed;">
+                            </div>
+                            <div class="form-group col-md-6">
+                                <label>Socio Incidencia</label>
+                                <input type="text" id="zf-staff-partner-inc" class="form-control" readonly style="background-color:rgba(255,255,255,0.01); border-style:dashed;">
+                            </div>
+                        </div>
+                    </div>
+                </form>
+            </div>
+            <div class="modal-footer">
+                <button class="btn btn-secondary modal-close-btn">Cancelar</button>
+                <button id="save-zone-btn" class="btn btn-primary">Guardar Zona</button>
+            </div>
+        </div>
+    </div>
+    
+    <!-- 2. BOX MODAL (Add / Edit) -->
+    <div id="box-modal" class="modal-overlay">
+        <div class="modal-content modal-lg">
+            <div class="modal-header">
+                <h3 id="box-modal-title">Agregar Nueva Caja</h3>
+                <button class="modal-close"><i class="fa-solid fa-xmark"></i></button>
+            </div>
+            <div class="modal-body">
+                <form id="box-form">
+                    <input type="hidden" id="box-form-id">
+                    
+                    <div class="form-row">
+                        <div class="form-group col-md-4">
+                            <label for="bf-node-code">Código de Nodo*</label>
+                            <input type="text" id="bf-node-code" class="form-control" required placeholder="Ej: ARE0005-XB01">
+                        </div>
+                        <div class="form-group col-md-4">
+                            <label for="bf-zone">Zona*</label>
+                            <input type="text" id="bf-zone" class="form-control" required placeholder="Ej: ARE_Z01">
+                        </div>
+                        <div class="form-group col-md-4">
+                            <label for="bf-branch">Sucursal (Branch)*</label>
+                            <input type="text" id="bf-branch" class="form-control" required placeholder="Ej: ARE">
+                        </div>
+                    </div>
+                    
+                    <div class="form-row">
+                        <div class="form-group col-md-4">
+                            <label for="bf-class">Clase de Caja</label>
+                            <input type="text" id="bf-class" class="form-control" placeholder="Ej: Distribution node">
+                        </div>
+                        <div class="form-group col-md-4">
+                            <label for="bf-type">Tipo de Caja</label>
+                            <input type="text" id="bf-type" class="form-control" placeholder="Ej: X_BOX">
+                        </div>
+                        <div class="form-group col-md-4">
+                            <label for="bf-status">Estado del Servicio</label>
+                            <select id="bf-status" class="form-control">
+                                <option value="Online">Online</option>
+                                <option value="Offline">Offline</option>
+                                <option value="Pending">Pending</option>
+                            </select>
+                        </div>
+                    </div>
+                    
+                    <div class="form-row">
+                        <div class="form-group col-md-6">
+                            <label for="bf-latitude">Latitud</label>
+                            <input type="number" id="bf-latitude" class="form-control" step="0.0000001" placeholder="Ej: -16.3343">
+                        </div>
+                        <div class="form-group col-md-6">
+                            <label for="bf-longitude">Longitud</label>
+                            <input type="number" id="bf-longitude" class="form-control" step="0.0000001" placeholder="Ej: -71.5416">
+                        </div>
+                    </div>
+                    
+                    <div class="form-row">
+                        <div class="form-group col-md-4">
+                            <label for="bf-olt">OLT</label>
+                            <input type="text" id="bf-olt" class="form-control">
+                        </div>
+                        <div class="form-group col-md-4">
+                            <label for="bf-ports-used">Puertos Usados</label>
+                            <input type="text" id="bf-ports-used" class="form-control" placeholder="Ej: 12">
+                        </div>
+                        <div class="form-group col-md-4">
+                            <label for="bf-infrastructure">Infraestructura</label>
+                            <input type="text" id="bf-infrastructure" class="form-control" placeholder="Ej: FTTH">
+                        </div>
+                    </div>
+                    
+                    <div class="form-row">
+                        <div class="form-group col-md-6">
+                            <label for="bf-site-phys">Site Físico</label>
+                            <input type="text" id="bf-site-phys" class="form-control">
+                        </div>
+                        <div class="form-group col-md-6">
+                            <label for="bf-site-log">Site Lógico</label>
+                            <input type="text" id="bf-site-log" class="form-control">
+                        </div>
+                    </div>
+                    
+                    <div class="form-group">
+                        <label for="bf-note">Notas</label>
+                        <textarea id="bf-note" class="form-control" rows="2"></textarea>
+                    </div>
+                </form>
+            </div>
+            <div class="modal-footer">
+                <button class="btn btn-secondary modal-close-btn">Cancelar</button>
+                <button id="save-box-btn" class="btn btn-primary">Guardar Caja</button>
+            </div>
+        </div>
+    </div>
+    
+    <!-- 3. STAFF MODAL (Add / Edit) -->
+    <div id="staff-modal" class="modal-overlay">
+        <div class="modal-content modal-lg">
+            <div class="modal-header">
+                <h3 id="staff-modal-title">Agregar Nuevo Personal</h3>
+                <button class="modal-close"><i class="fa-solid fa-xmark"></i></button>
+            </div>
+            <div class="modal-body">
+                <form id="staff-form">
+                    <input type="hidden" id="staff-form-id">
+                    
+                    <div class="form-row">
+                        <div class="form-group col-md-6">
+                            <label for="sf-staff-team">Equipo Staff*</label>
+                            <input type="text" id="sf-staff-team" class="form-control" required placeholder="Nombre del personal / equipo">
+                        </div>
+                        <div class="form-group col-md-6">
+                            <label for="sf-vtp-username">Usuario VTP</label>
+                            <input type="text" id="sf-vtp-username" class="form-control" placeholder="Ej: vtp_luis.condori">
+                        </div>
+                    </div>
+                    
+                    <div class="form-row">
+                        <div class="form-group col-md-4">
+                            <label for="sf-zone">Zona*</label>
+                            <input type="text" id="sf-zone" class="form-control" required placeholder="Ej: ARE_Z01">
+                        </div>
+                        <div class="form-group col-md-4">
+                            <label for="sf-branch">Sucursal (Branch)</label>
+                            <input type="text" id="sf-branch" class="form-control" placeholder="Ej: ARE">
+                        </div>
+                        <div class="form-group col-md-4">
+                            <label for="sf-olt">OLT</label>
+                            <input type="text" id="sf-olt" class="form-control" placeholder="Ej: ARE0005OLT01">
+                        </div>
+                    </div>
+                    
+                    <div class="form-row">
+                        <div class="form-group col-md-4">
+                            <label for="sf-partner">Socio / Partner</label>
+                            <input type="text" id="sf-partner" class="form-control" placeholder="Ej: RUPAY">
+                        </div>
+                        <div class="form-group col-md-4">
+                            <label for="sf-partner-incidence">Socio Incidencia</label>
+                            <input type="text" id="sf-partner-incidence" class="form-control" placeholder="Ej: ELECTRONICSMART">
+                        </div>
+                        <div class="form-group col-md-4">
+                            <label for="sf-warranty">Periodo Garantía (Días)</label>
+                            <input type="number" id="sf-warranty" class="form-control" placeholder="Ej: 30">
+                        </div>
+                    </div>
+                    
+                    <div class="form-row">
+                        <div class="form-group col-md-6">
+                            <label for="sf-site">Site (OLT Site)</label>
+                            <input type="text" id="sf-site" class="form-control" placeholder="Ej: ARE0005">
+                        </div>
+                        <div class="form-group col-md-6">
+                            <label for="sf-site-code">Site Code</label>
+                            <input type="text" id="sf-site-code" class="form-control" placeholder="Ej: LAL0014">
+                        </div>
+                    </div>
+                    
+                    <div class="form-row">
+                        <div class="form-group col-md-4">
+                            <label for="sf-team-dist">Distribución de Equipos</label>
+                            <input type="text" id="sf-team-dist" class="form-control">
+                        </div>
+                        <div class="form-group col-md-4">
+                            <label for="sf-incidents-dist">Distribución Incidencias</label>
+                            <input type="text" id="sf-incidents-dist" class="form-control">
+                        </div>
+                        <div class="form-group col-md-4">
+                            <label for="sf-incidents-dist-team">Incidencias por Equipo</label>
+                            <input type="text" id="sf-incidents-dist-team" class="form-control">
+                        </div>
+                    </div>
+                </form>
+            </div>
+            <div class="modal-footer">
+                <button class="btn btn-secondary modal-close-btn">Cancelar</button>
+                <button id="save-staff-btn" class="btn btn-primary">Guardar Asignación</button>
+            </div>
+        </div>
+    </div>
+    
+    <!-- 4. DETALLE DE CORTES MODAL -->
+    <div id="outage-details-modal" class="modal-overlay">
+        <div class="modal-card" style="max-width: 900px; width: 90%;">
+            <div class="modal-header">
+                <h3><i class="fa-solid fa-circle-exclamation text-danger"></i> Detalle de Cortes - <span id="outage-modal-title-site">SITE</span></h3>
+                <button class="modal-close-icon modal-close-btn">&times;</button>
+            </div>
+            <div class="modal-body">
+                <div class="table-responsive" style="max-height: 450px; overflow-y: auto;">
+                    <table class="table table-hover table-sm">
+                        <thead>
+                            <tr>
+                                <th>Nombre OLT</th>
+                                <th>Puerto</th>
+                                <th>Tipo Corte</th>
+                                <th>Fecha y Hora</th>
+                                <th>Clientes Afectados</th>
+                                <th>WOs Creadas</th>
+                                <th>Causa</th>
+                                <th>IDs ONUs</th>
+                            </tr>
+                        </thead>
+                        <tbody id="outage-details-table-body">
+                            <!-- Filled dynamically -->
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+            <div class="modal-footer">
+                <button class="btn btn-secondary modal-close-btn">Cerrar</button>
+            </div>
+        </div>
+    </div>
+    
+    <!-- 4.5 DETALLE DE WOs MODAL -->
+    <div id="wo-details-modal" class="modal-overlay">
+        <div class="modal-card" style="max-width: 900px; width: 90%;">
+            <div class="modal-header">
+                <h3><i class="fa-solid fa-file-invoice text-primary"></i> Detalle de WOs - <span id="wo-modal-title-site">SITE</span></h3>
+                <button class="modal-close-icon modal-close-btn">&times;</button>
+            </div>
+            <div class="modal-body">
+                <div class="table-responsive" style="max-height: 450px; overflow-y: auto;">
+                    <table class="table table-hover table-sm">
+                        <thead>
+                            <tr>
+                                <th>Código WO</th>
+                                <th>Cliente</th>
+                                <th>Fecha Creación</th>
+                                <th>Contrata Cierre</th>
+                                <th>¿Reincidente?</th>
+                                <th>Motivo Cierre / Estatus</th>
+                            </tr>
+                        </thead>
+                        <tbody id="wo-details-table-body">
+                            <!-- Filled dynamically -->
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+            <div class="modal-footer">
+                <button class="btn btn-secondary modal-close-btn">Cerrar</button>
+            </div>
+        </div>
+    </div>
+    
+    <!-- 3. TOAST NOTIFICATIONS -->
+    <div id="toast-container" class="toast-container"></div>
+</div>
+
+    <!-- Modal Selección OLTs -->
+    <div id="olt-selection-modal" class="modal" onclick="if(event.target===this)this.classList.remove('active')">
+        <div class="modal-content card" style="max-width: 600px;">
+            <div class="modal-header">
+                <h2><i class="fa-solid fa-list-check" style="margin-right:8px;color:#34A853;"></i>Consultar OLTs Específicas</h2>
+                <button class="btn-close" id="olt-modal-close" onclick="document.getElementById('olt-selection-modal').classList.remove('active')">&times;</button>
+            </div>
+            <div class="modal-body">
+                <p style="margin-bottom:15px; color:#9AA0A6;">Selecciona las OLTs que deseas auditar. El escaneo parcial será mucho más rápido.</p>
+                <input type="text" id="olt-search-input" class="search-input" placeholder="🔍 Buscar OLT por nombre o IP..." style="width: 100%; margin-bottom: 15px; padding: 10px; border-radius: 8px; border: 1px solid #3c4043; background: #202124; color: white;">
+                
+                <div style="display:flex; gap:10px; margin-bottom:15px;">
+                    <button id="btn-olt-select-all" class="btn-action" style="font-size:12px; padding:6px 12px;">Seleccionar Todo</button>
+                    <button id="btn-olt-deselect-all" class="btn-action" style="font-size:12px; padding:6px 12px; background:transparent; border:1px solid #5f6368;">Deseleccionar Todo</button>
+                </div>
+
+                <div id="olt-checkbox-list" style="max-height: 300px; overflow-y: auto; background: #1a1b1e; padding: 10px; border-radius: 8px; border: 1px solid #3c4043; display: grid; grid-template-columns: 1fr 1fr; gap: 10px;">
+                    <!-- Checkboxes de OLTs se inyectarán aquí -->
+                </div>
+            </div>
+            <div class="modal-footer" style="padding: 15px 24px; border-top: 1px solid #3c4043; display: flex; justify-content: flex-end; gap: 10px;">
+                <button id="btn-olt-modal-cancel" class="btn-action" onclick="document.getElementById('olt-selection-modal').classList.remove('active')" style="background:transparent; border:1px solid #5f6368;">Cancelar</button>
+                <button id="btn-olt-modal-start" class="btn-sync" style="background:#34A853; border-color:#34A853;"><i class="fa-solid fa-play"></i> Iniciar Escaneo</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- Modal OLTs con Error / Sin respuesta EMS -->
+    <div id="olt-errors-modal" class="modal" onclick="if(event.target===this)_closeOltErrorsModal()">
+        <div class="modal-content card" style="max-width: 850px; width: 95%;">
+            <div class="modal-header">
+                <h2><i class="fa-solid fa-triangle-exclamation" style="margin-right:8px;color:#FBBC04;"></i>OLTs sin Respuesta / con Error en EMS</h2>
+                <button class="btn-close" id="olt-errors-modal-close" onclick="_closeOltErrorsModal()">&times;</button>
+            </div>
+            <div class="modal-body" style="padding: 20px;">
+                <p style="margin-bottom:14px; color:#9AA0A6; font-size:13px;">
+                    Estas OLTs presentaron errores al ser consultadas por el NBI SOAP de ZTE (no existen en el EMS, están desconectadas o dieron timeout de red).
+                </p>
+                <div style="display:flex; gap:10px; margin-bottom:14px; flex-wrap:wrap;">
+                    <input type="text" id="olt-errors-search" class="filter-input-sm" placeholder="🔍 Buscar OLT o IP con error..." style="flex:1; min-width:200px;">
+                    <select id="olt-errors-filter-cat" class="filter-select-sm">
+                        <option value="">Todas las causas</option>
+                        <option value="NE_NOT_EXIST">No existe en EMS (ZTE)</option>
+                        <option value="NE_DISCONNECTED">Desconectada de EMS (Offline)</option>
+                        <option value="TIMEOUT">Timeout de Red</option>
+                    </select>
+                </div>
+                <div class="table-responsive" style="max-height: 380px; overflow-y: auto;">
+                    <table class="data-table small-table" id="olt-errors-table">
+                        <thead>
+                            <tr>
+                                <th>OLT</th>
+                                <th>IP</th>
+                                <th>Diagnóstico ZTE</th>
+                                <th class="text-center">Puertos Falla</th>
+                                <th>Mensaje del Servidor EMS</th>
+                                <th class="text-center">Acción</th>
+                            </tr>
+                        </thead>
+                        <tbody id="olt-errors-tbody">
+                            <tr><td colspan="6" class="text-center"><i class="fa-solid fa-spinner fa-spin"></i> Cargando...</td></tr>
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+            <div class="modal-footer" style="padding: 12px 24px; border-top: 1px solid #3c4043; display: flex; justify-content: flex-end;">
+                <button id="btn-olt-errors-close" class="btn-action" style="background:#3c4043;" onclick="_closeOltErrorsModal()">Cerrar</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- Modal Detalle Completo de OLT -->
+    <div id="olt-detail-modal" class="modal" onclick="if(event.target===this)_closeOltDetailModal()">
+        <div class="modal-content card" style="max-width: 950px; width: 95%; max-height: 90vh; display: flex; flex-direction: column;">
+            <div class="modal-header" style="flex-shrink: 0;">
+                <div>
+                    <h2 style="display:flex; align-items:center; gap:10px; margin:0;">
+                        <i class="fa-solid fa-server" style="color:#1A73E8;"></i>
+                        <span id="olt-detail-title">Detalle de OLT</span>
+                        <span id="olt-detail-ip" style="font-size:12px; font-family:monospace; color:#9AA0A6; background:#202124; padding:2px 8px; border-radius:4px;">172.x.x.x</span>
+                    </h2>
+                    <p id="olt-detail-ts" style="font-size:11px; color:#9AA0A6; margin:4px 0 0 0;">Último escaneo: —</p>
+                </div>
+                <button class="btn-close" id="olt-detail-modal-close" onclick="_closeOltDetailModal()">&times;</button>
+            </div>
+            <div class="modal-body" style="overflow-y: auto; padding: 15px 20px;">
+                <!-- Summary Badges Grid -->
+                <div style="display:grid; grid-template-columns: repeat(auto-fit, minmax(110px, 1fr)); gap:10px; margin-bottom:15px;" id="olt-detail-stats-grid">
+                    <!-- Stat pills injected dynamically -->
+                </div>
+
+                <!-- Desglose por Puerto (Visual Grid) -->
+                <h4 style="font-size:0.9rem; font-weight:600; margin:0 0 8px; color:#16233A;">
+                    <i class="fa-solid fa-network-wired" style="color:#0B7A44; margin-right:6px;"></i>Desglose de Puertos
+                </h4>
+                <div id="olt-detail-pon-grid" style="display:grid; grid-template-columns: repeat(4, 1fr); gap:8px; margin-bottom:18px;">
+                    <!-- Puerto cards injected here -->
+                </div>
+
+                <!-- Cortes Alert if any -->
+                <div id="olt-detail-cortes-wrap" style="display:none; margin-bottom:15px;">
+                    <h4 style="font-size:0.9rem; font-weight:600; margin:0 0 8px; color:#D93025;">
+                        <i class="fa-solid fa-bolt" style="margin-right:6px;"></i>Cortes Masivos Detectados en esta OLT
+                    </h4>
+                    <div id="olt-detail-cortes-list"></div>
+                </div>
+
+                <!-- ONUs Table on this OLT -->
+                <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:8px; flex-wrap:wrap; gap:8px;">
+                    <h4 style="font-size:0.9rem; font-weight:600; margin:0; color:#16233A;">
+                        <i class="fa-solid fa-users-viewfinder" style="color:#1A73E8; margin-right:6px;"></i>Listado de ONUs / Clientes
+                    </h4>
+                    <div style="display:flex; gap:6px;">
+                        <select id="olt-detail-filter-pon" class="filter-select-sm">
+                            <option value="">Todos los Puertos</option>
+                        </select>
+                        <select id="olt-detail-filter-estado" class="filter-select-sm">
+                            <option value="">Todos los Estados</option>
+                            <option value="OK">OK</option>
+                            <option value="FALLA">Solo Fallas (LOS/Energía)</option>
+                            <option value="INACTIVO">Inactivos</option>
+                        </select>
+                    </div>
+                </div>
+                <div class="table-responsive" style="max-height: 250px; overflow-y: auto;">
+                    <table class="data-table small-table" id="olt-detail-onus-table">
+                        <thead>
+                            <tr>
+                                <th>PUERTO</th>
+                                <th>ONU ID</th>
+                                <th>SN</th>
+                                <th>Estado</th>
+                                <th>Fecha Caída</th>
+                                <th>Días S/S</th>
+                                <th>Tipo Falla</th>
+                                <th>Prioridad</th>
+                            </tr>
+                        </thead>
+                        <tbody id="olt-detail-onus-tbody">
+                            <!-- Injected rows -->
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+            <div class="modal-footer" style="padding: 12px 24px; border-top: 1px solid #3c4043; display: flex; justify-content: flex-end;">
+                <button id="btn-olt-detail-close" class="btn-action" style="background:#3c4043;">Cerrar</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- Modal Detalle -->
+    <div id="detail-modal" class="modal">
+        <div class="modal-content card">
+            <div class="modal-header">
+                <h2>Detalle de Orden de Trabajo: <span id="modal-wo-code">WO-xxxxx</span></h2>
+                <button class="btn-close" id="modal-close">&times;</button>
+            </div>
+            <div class="modal-body">
+                <div class="info-grid">
+                    <div>
+                        <strong>Nombre WO:</strong>
+                        <p id="modal-wo-name">-</p>
+                    </div>
+                    <div>
+                        <strong>Tipo WO:</strong>
+                        <p id="modal-wo-type">-</p>
+                    </div>
+                    <div>
+                        <strong>Grupo Asignado (CD):</strong>
+                        <p id="modal-cd-group">-</p>
+                    </div>
+                    <div>
+                        <strong>Técnico (FT):</strong>
+                        <p id="modal-ft-tech">-</p>
+                    </div>
+                </div>
+                
+                <!-- Datos de Cruce Tableau -->
+                <div class="modal-detail-block tableau-block" style="background: rgba(26, 115, 232, 0.08); padding: 12px; border-radius: 8px; border: 1px solid rgba(26, 115, 232, 0.2); margin-bottom: 15px;">
+                    <strong style="color: #1a73e8;"><i class="fa-solid fa-layer-group"></i> Metadatos Cruzados de Tableau (WO Pending):</strong>
+                    <div class="info-grid half-gap" style="margin-top: 8px;">
+                        <div>
+                            <strong>Sucursal (Branch):</strong>
+                            <p id="modal-branch">-</p>
+                        </div>
+                        <div>
+                            <strong>Días de Garantía (Warranty):</strong>
+                            <p id="modal-warranty">-</p>
+                        </div>
+                        <div>
+                            <strong>Fecha Instalación (Impl. Test):</strong>
+                            <p id="modal-impl-test">-</p>
+                        </div>
+                        <div>
+                            <strong>Caja Instalación (Connector):</strong>
+                            <p id="modal-connector">-</p>
+                        </div>
+                        <div>
+                            <strong>Act Status:</strong>
+                            <p id="modal-act-status">-</p>
+                        </div>
+                        <div>
+                            <strong>Sub Status:</strong>
+                            <p id="modal-sub-status">-</p>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Datos del Cliente (NIMS/TMs) y Botones de Accion -->
+                <div class="modal-detail-block subscriber-block" id="modal-subscriber-block" style="display: none; background: rgba(52, 168, 83, 0.08); padding: 12px; border-radius: 8px; border: 1px solid rgba(52, 168, 83, 0.2); margin-bottom: 15px;">
+                    <strong style="color: #34a853;"><i class="fa-solid fa-user-gear"></i> Información de Suscriptor (NIMS & TMs):</strong>
+                    <div class="info-grid half-gap" style="margin-top: 8px;">
+                        <div>
+                            <strong>Cliente:</strong>
+                            <p id="sub-name">-</p>
+                        </div>
+                        <div>
+                            <strong>Estado:</strong>
+                            <p id="sub-status">-</p>
+                        </div>
+                        <div>
+                            <strong>MAC:</strong>
+                            <p id="sub-mac">-</p>
+                        </div>
+                        <div>
+                            <strong>OLT:</strong>
+                            <p id="sub-olt">-</p>
+                        </div>
+                        <div>
+                            <strong>Puerto OLT:</strong>
+                            <p id="sub-port">-</p>
+                        </div>
+                        <div>
+                            <strong>IP / BRAS:</strong>
+                            <p id="sub-bras">-</p>
+                        </div>
+                    </div>
+                    <div style="display: flex; gap: 10px; margin-top: 12px;">
+                        <button id="btn-query-bras" class="btn-sync" style="background: #1a73e8; border-color: #1a73e8;">
+                            <i class="fa-solid fa-terminal"></i> Consultar BRAS
+                        </button>
+                        <button id="btn-query-olt" class="btn-sync" style="background: #e67e22; border-color: #e67e22;" title="Estado del puerto (1 de 16) donde está el cliente, según el último escaneo continuo de la Auditoría OLT">
+                            <i class="fa-solid fa-tower-broadcast"></i> Estado del Puerto
+                        </button>
+                    </div>
+                </div>
+
+                <!-- Live Results -->
+                <div class="modal-detail-block" id="live-results-block" style="display: none; margin-bottom: 15px;">
+                    <strong style="color: #f1c40f;"><i class="fa-solid fa-square-poll-horizontal"></i> <span id="live-results-title">Resultados de Consulta</span>:</strong>
+                    <div class="pre-container" style="max-height: 250px; overflow-y: auto; background: #1e1e1e; color: #00ff00; padding: 10px; border-radius: 6px; font-family: monospace; margin-top: 8px;">
+                        <pre id="live-results-content" style="white-space: pre-wrap; font-size: 13px; margin: 0; color: #00ff00;"></pre>
+                    </div>
+                </div>
+
+                <div class="modal-detail-block">
+                    <strong>Descripción del Incidente / Datos del Cliente:</strong>
+                    <div class="pre-container">
+                        <pre id="modal-description">-</pre>
+                    </div>
+                </div>
+                
+                <div class="info-grid half-gap">
+                    <div>
+                        <strong>Fecha de Creación:</strong>
+                        <p id="modal-create-time">-</p>
+                    </div>
+                    <div>
+                        <strong>Tiempo Pendiente:</strong>
+                        <p id="modal-pending-hours">-</p>
+                    </div>
+                    <div>
+                        <strong>Fecha/Hora de Cierre:</strong>
+                        <p id="modal-closed-time">-</p>
+                    </div>
+                </div>
+
+                <div class="modal-detail-block mt-1">
+                    <strong>Comentarios del Técnico (FT comment):</strong>
+                    <div class="comment-box" id="modal-comment-box">
+                        <p id="modal-ft-comment">-</p>
+                    </div>
+                </div>
+                
+                <div class="modal-detail-block mt-1">
+                    <strong>Resultado de Clasificación / Motivo de Cierre:</strong>
+                    <div class="reason-badge-container">
+                        <span id="modal-reason-badge" class="badge large">-</span>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Modal Diagnóstico de Caja de Distribución (Telecom Engineer) -->
+    <div id="diagnostics-modal" class="modal">
+        <div class="modal-content card" style="max-width: 900px; width: 95%;">
+            <div class="modal-header">
+                <h2 style="font-size: 1.25rem; font-weight: bold;"><i class="fa-solid fa-user-shield" style="color: #DB4437; margin-right: 8px;"></i> Diagnóstico de Caja: <span id="diag-box-code" class="text-accent">-</span></h2>
+                <button class="btn-close" id="diag-modal-close">&times;</button>
+            </div>
+            <div class="modal-body" style="padding-top: 10px;">
+                <!-- Route & Site Info -->
+                <div class="topology-card card p-1 bg-dark-card mb-2" style="border: 1px solid rgba(255,255,255,0.05); background: rgba(0,0,0,0.25);">
+                    <div style="font-size: 13px; color: #9AA0A6; margin-bottom: 4px;"><strong>Ruta Jerárquica Física:</strong></div>
+                    <div id="diag-full-route" class="route-badge-box" style="font-size: 14px; font-weight: bold; color: #4285F4; font-family: monospace;">-</div>
+                </div>
+
+                <!-- Engineering Assessment & Proposed Solution -->
+                <div class="info-grid mb-2" style="grid-template-columns: repeat(auto-fit, minmax(350px, 1fr)); gap: 15px;">
+                    <div class="card p-1-5" id="diag-severity-card" style="background: rgba(231, 76, 60, 0.08); border: 1px solid rgba(231, 76, 60, 0.2); border-radius: 8px;">
+                        <strong style="color: #e74c3c; font-size: 14px;"><i class="fa-solid fa-triangle-exclamation"></i> Diagnóstico de Ingeniería:</strong>
+                        <p id="diag-assessment-text" style="font-size: 13px; margin-top: 8px; line-height: 1.4; color: #E0E4E8;">-</p>
+                    </div>
+                    <div class="card p-1-5" style="background: rgba(52, 152, 219, 0.08); border: 1px solid rgba(52, 152, 219, 0.2); border-radius: 8px;">
+                        <strong style="color: #3498db; font-size: 14px;"><i class="fa-solid fa-screwdriver-wrench"></i> Acción Correctiva Propuesta:</strong>
+                        <p id="diag-solution-text" style="font-size: 13px; margin-top: 8px; line-height: 1.4; color: #E0E4E8;">-</p>
+                    </div>
+                </div>
+
+                <!-- Visual Splitter Ports Layout (8 Ports) -->
+                <div class="card p-1-5 mb-2">
+                    <div style="display: flex; justify-content: space-between; align-items: center; border-bottom: 1px solid rgba(255,255,255,0.05); padding-bottom: 6px; margin-bottom: 10px;">
+                        <strong style="color: #FBBC04; font-size: 14px;"><i class="fa-solid fa-circle-nodes"></i> Diagrama Físico de Ocupación (Splitter 1:8):</strong>
+                        <button class="btn-sync" id="btn-diag-ping-all" style="font-size: 10px; padding: 2px 6px; background:#1a73e8; border-color:#1a73e8;">
+                            <i class="fa-solid fa-radar"></i> Ping Todo BRAS
+                        </button>
+                    </div>
+                    <div id="splitter-ports-container" style="display: grid; grid-template-columns: repeat(8, 1fr); gap: 10px; margin-top: 12px;">
+                        <!-- Ports dynamically generated -->
+                    </div>
+                </div>
+
+                <!-- Associated Work Orders on this Box -->
+                <div class="card p-1-5 mb-2">
+                    <strong style="color: #AB47BC; font-size: 14px;"><i class="fa-solid fa-ticket"></i> Órdenes de Trabajo Activas en esta Caja:</strong>
+                    <div class="table-responsive mt-1" style="max-height: 200px; overflow-y: auto;">
+                        <table class="data-table small-table">
+                            <thead>
+                                <tr>
+                                    <th>Código WO</th>
+                                    <th>Tipo</th>
+                                    <th>Retraso</th>
+                                    <th>Técnico</th>
+                                    <th>Comentarios del Técnico</th>
+                                </tr>
+                            </thead>
+                            <tbody id="diag-wos-table-body">
+                                <!-- Active WOs dynamic -->
+                            </tbody>
+                        </table>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+
+    <div id="alarm-detail-modal" class="modal">
+        <div class="modal-content card" style="max-width: 1000px; width: 95%;">
+            <div class="modal-header">
+                <h2 style="font-size: 1.25rem; font-weight: bold;"><i class="fa-solid fa-triangle-exclamation" style="color: #EA4335; margin-right: 8px;"></i> <span id="alarm-modal-title">-</span></h2>
+                <button class="btn-close" id="alarm-modal-close">&times;</button>
+            </div>
+            <div class="modal-body" style="padding-top: 10px;">
+                <div class="info-grid mb-2">
+                    <div><strong>Branch:</strong> <span id="alarm-modal-branch">-</span></div>
+                    <div><strong>Total abonados activos:</strong> <span id="alarm-modal-total-act">-</span></div>
+                    <div><strong>Online:</strong> <span id="alarm-modal-total-online" style="color:#34A853;">-</span></div>
+                    <div><strong>Not Online:</strong> <span id="alarm-modal-total-offline" style="color:#EA4335;">-</span></div>
+                    <div><strong>Nunca Online:</strong> <span id="alarm-modal-total-never" style="color:#AB47BC;">-</span></div>
+                </div>
+                <div id="alarm-modal-loading" style="color:#9AA0A6;">
+                    <i class="fa-solid fa-spinner fa-spin"></i> Escaneando toda la OLT en vivo (puede tardar varios minutos)...
+                </div>
+                <div id="alarm-modal-grid"></div>
+            </div>
+        </div>
+    </div>
+
+    <script src="app.js?v=24"></script>
+    <!-- Leaflet.js Map (módulo FBB DATA) -->
+    <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js" integrity="sha256-20nQCchB9co0qIjJZRGuk2/Z9VM+kNiyxNV1lvTlZBo=" crossorigin=""></script>
+    <script src="fbb-app.js?v=2"></script>
+</body>
+</html>
