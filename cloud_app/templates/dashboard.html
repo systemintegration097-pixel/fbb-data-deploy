@@ -1,0 +1,88 @@
+<!doctype html>
+<html lang="es">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Despliegues Pendientes — {{ branch }}</title>
+  <link rel="stylesheet" href="{{ url_for('static', filename='style.css') }}">
+</head>
+<body>
+  <header class="topbar">
+    <div>
+      <strong>Sucursal {{ branch }}</strong>
+      <span class="muted">Despliegues pendientes ({{ clients|length }})</span>
+    </div>
+    <form method="post" action="{{ url_for('logout') }}">
+      <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+      <button type="submit" class="btn-secondary">Salir</button>
+    </form>
+  </header>
+
+  <main>
+    {% if not clients %}
+      <p class="empty-state">No hay despliegues pendientes para tu sucursal en este momento.</p>
+    {% else %}
+    <table>
+      <thead>
+        <tr>
+          <th>Account</th>
+          <th>Cliente</th>
+          <th>Teléfono</th>
+          <th>Partner</th>
+          <th>Tipo</th>
+          <th>Días Pendiente</th>
+          <th>Estado</th>
+          <th>Comentario</th>
+          <th></th>
+        </tr>
+      </thead>
+      <tbody>
+        {% for c in clients %}
+        <tr class="{{ 'row-over72' if c.deployment_type == 'Over 72h' else '' }}" data-account="{{ c.account }}">
+          <td>{{ c.account }}</td>
+          <td>{{ c.customer_name }}</td>
+          <td>{{ c.phone }}</td>
+          <td>{{ c.partner }}</td>
+          <td>{{ c.deployment_type }}</td>
+          <td>{{ c.pending_days }}</td>
+          <td><input type="text" class="status-input" value="{{ c.status or '' }}" maxlength="80"></td>
+          <td><textarea class="comment-input" rows="2" maxlength="2000">{{ c.comment or '' }}</textarea></td>
+          <td><button type="button" class="btn-save" onclick="saveComment(this)">Guardar</button></td>
+        </tr>
+        {% endfor %}
+      </tbody>
+    </table>
+    {% endif %}
+  </main>
+
+  <script>
+    const CSRF_TOKEN = "{{ csrf_token() }}";
+
+    async function saveComment(btn) {
+      const row = btn.closest("tr");
+      const account = row.dataset.account;
+      const comment = row.querySelector(".comment-input").value;
+      const status = row.querySelector(".status-input").value;
+      const originalLabel = btn.textContent;
+      btn.disabled = true;
+      btn.textContent = "Guardando...";
+      try {
+        const resp = await fetch(`/api/my/clients/${encodeURIComponent(account)}/comment`, {
+          method: "POST",
+          headers: { "Content-Type": "application/json", "X-CSRFToken": CSRF_TOKEN },
+          body: JSON.stringify({ comment, status }),
+        });
+        if (!resp.ok) throw new Error("save failed");
+        btn.textContent = "Guardado ✓";
+      } catch (e) {
+        btn.textContent = "Error, reintentar";
+      } finally {
+        setTimeout(() => {
+          btn.disabled = false;
+          if (btn.textContent !== originalLabel) btn.textContent = originalLabel;
+        }, 1500);
+      }
+    }
+  </script>
+</body>
+</html>

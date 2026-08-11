@@ -13,6 +13,7 @@ import process_data
 import nims_topology
 import kpi_calc
 import deploy_pending
+import cloud_sync
 try:
     import an_portal_client
 except Exception:
@@ -1115,6 +1116,17 @@ def _alarm_scan_loop():
                 alarm_scan_status["state"] = "error"
         time.sleep(max(0, ALARM_SCAN_INTERVAL_SECONDS - (time.time() - cycle_start)))
 
+CLOUD_COMMENTS_PULL_INTERVAL_SECONDS = 5 * 60
+
+def _cloud_comments_pull_loop():
+    if not cloud_sync.is_configured():
+        print("[cloud_sync] CLOUD_SYNC_URL/CLOUD_API_KEY no configurados: no se van a traer comentarios de encargados.", flush=True)
+        return
+    while True:
+        cycle_start = time.time()
+        cloud_sync.pull_comments()
+        time.sleep(max(0, CLOUD_COMMENTS_PULL_INTERVAL_SECONDS - (time.time() - cycle_start)))
+
 @app.route("/api/topology/alarms", methods=["GET"])
 def get_topology_alarms():
     severity = request.args.get("severity", "").strip()
@@ -1912,7 +1924,15 @@ def kpi_refresh_reference():
 @app.route("/api/deploy_pending/summary")
 def deploy_pending_summary():
     try:
-        return jsonify(deploy_pending.get_summary())
+        data = deploy_pending.get_summary()
+        comments = cloud_sync.get_cached_comments()
+        for c in data.get("clients", []):
+            info = comments.get(c.get("account"))
+            c["comment"] = info.get("comment", "") if info else ""
+            c["status"] = info.get("status", "") if info else ""
+            c["comment_updated_by"] = info.get("comment_updated_by", "") if info else ""
+            c["comment_updated_at"] = info.get("comment_updated_at") if info else None
+        return jsonify(data)
     except Exception as e:
         return jsonify({"error": str(e)}), 500
 
@@ -2499,6 +2519,7 @@ def static_proxy(path):
 if __name__ == "__main__":
     print("Iniciando servidor de la Plataforma de Avance GNOC en http://localhost:5001 ...")
     threading.Thread(target=_alarm_scan_loop, daemon=True).start()
+    threading.Thread(target=_cloud_comments_pull_loop, daemon=True).start()
     # Loop automático de Auditoría OLT — arranca siempre; si falta olts_input.xlsx
     # el loop espera 60 s y reintenta hasta que el archivo aparezca.
     threading.Thread(target=_olt_scan_loop, daemon=True).start()

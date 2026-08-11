@@ -8,3 +8,4 @@ gspread>=6.2.0
 google-auth>=2.56.0
 selenium>=4.47.0
 webdriver_manager>=4.1.0
+requests>=2.31.0

@@ -16,6 +16,8 @@ from datetime import datetime
 import gspread
 from google.oauth2.service_account import Credentials
 
+import cloud_sync
+
 BASE_PATH = os.path.dirname(os.path.abspath(__file__))
 DEPLOY_DIR = os.path.join(BASE_PATH, "deploy ant")
 DEPLOY_SCRIPT = os.path.join(DEPLOY_DIR, "deploy.py")
@@ -207,6 +209,7 @@ def _run_worker():
                 _run_proc = None
             return
 
+        succeeded = False
         with _run_lock:
             _run_proc = None
             # Si el usuario canceló mientras tanto, no pisar ese estado con un
@@ -216,10 +219,20 @@ def _run_worker():
             if _log_has_fresh_success(inicio):
                 _run_state["state"] = "success"
                 _run_state["message"] = "Actualización de despliegues completada con éxito."
+                succeeded = True
             else:
                 tail = "\n".join("".join(salida_lines).strip().splitlines()[-8:])
                 _run_state["state"] = "error"
                 _run_state["message"] = f"El script terminó sin registrar éxito (código {proc.returncode}): {tail or 'sin salida'}"
+
+        if succeeded:
+            # Fuera del lock (una request HTTP no debe bloquear get_run_status()) y
+            # nunca debe convertir una corrida local exitosa en un error: si la nube
+            # está caída, solo se loguea.
+            try:
+                cloud_sync.push_clients(get_summary()["clients"])
+            except Exception as e:
+                print(f"[deploy_pending] No se pudo subir a la nube (no afecta el resultado local): {e}")
     except Exception as e:
         with _run_lock:
             _run_proc = None

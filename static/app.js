@@ -3091,6 +3091,12 @@ async function _loadDeployPending() {
     }
 }
 
+function _escapeHtml(str) {
+    return String(str ?? "").replace(/[&<>"']/g, (c) => ({
+        "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;",
+    }[c]));
+}
+
 function _renderDeployPendingClients() {
     if (!_dpSummary) return;
     const tbody = document.getElementById("dp-clients-table-body");
@@ -3110,13 +3116,18 @@ function _renderDeployPendingClients() {
     }
 
     if (!rows.length) {
-        tbody.innerHTML = '<tr><td colspan="8" class="text-center" style="color:#9AA0A6;">Sin resultados con estos filtros.</td></tr>';
+        tbody.innerHTML = '<tr><td colspan="9" class="text-center" style="color:#9AA0A6;">Sin resultados con estos filtros.</td></tr>';
         return;
     }
 
     const tipoColor = t => t === "Over 72h" ? "#D93025" : t === "Over 48h" ? "#F4B400" : t === "Over 24h" ? "#FF6D01" : "#0F9D58";
 
-    tbody.innerHTML = rows.slice(0, 500).map(c => `
+    tbody.innerHTML = rows.slice(0, 500).map(c => {
+        const needsExplanation = c.deployment_type === "Over 72h" && !c.comment;
+        const commentCell = c.comment
+            ? `<span title="${_escapeHtml(`Actualizado por ${c.comment_updated_by || "—"} el ${c.comment_updated_at || "—"}`)}">${_escapeHtml(c.comment)}</span>`
+            : `<span style="color:${needsExplanation ? "#D93025" : "#9AA0A6"};">${needsExplanation ? "⚠ Sin explicación" : "—"}</span>`;
+        return `
         <tr>
             <td>${c.branch || "—"}</td>
             <td style="font-family:monospace;font-size:11px;">${c.account}</td>
@@ -3126,8 +3137,9 @@ function _renderDeployPendingClients() {
             <td><span style="color:${tipoColor(c.deployment_type)};font-weight:600;">${c.deployment_type || "—"}</span></td>
             <td class="text-center">${c.pending_days || "—"}</td>
             <td style="font-family:monospace;font-size:10px;">${c.connector_code || "—"}</td>
-        </tr>
-    `).join("") + (rows.length > 500 ? `<tr><td colspan="8" class="text-center" style="color:#9AA0A6;">Mostrando 500 de ${rows.length} resultados — afina la búsqueda para ver más.</td></tr>` : "");
+            <td style="max-width:220px;">${commentCell}</td>
+        </tr>`;
+    }).join("") + (rows.length > 500 ? `<tr><td colspan="9" class="text-center" style="color:#9AA0A6;">Mostrando 500 de ${rows.length} resultados — afina la búsqueda para ver más.</td></tr>` : "");
 }
 
 const _dpRunBtnOriginalHtml = '<i class="fa-solid fa-arrows-rotate"></i> <span>Actualizar Despliegues</span>';
