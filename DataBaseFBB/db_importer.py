@@ -669,15 +669,21 @@ def import_to_sqlite():
                         VALUES (?, ?, ?, ?, ?, ?, 0)
                     """, (partner_val, branch_val, kpi_val, hours_val, station_val, my_val))
                     deployments_imported += 1
-                    
+            else:
+                # Se saltó TODA la importación en silencio la última vez que la hoja de
+                # origen renombró/quitó la columna "Partner" -sin este log, no había forma
+                # de notar que "deployments" se quedó desactualizado hasta revisar a mano.
+                print(f"ADVERTENCIA: no se encontró columna de 'partner' y/o 'branch' en List_Deployed.csv -- "
+                      f"se omite la importación de deployments. Columnas disponibles: {list(df_dep.columns)}")
+
         except Exception as ex:
             print("Error importing deployments:", ex)
-            
+
     import_olt_cortes(cursor)
     
     conn.commit()
     conn.close()
-    return zones_imported, boxes_imported, staff_imported, incidents_imported
+    return zones_imported, boxes_imported, staff_imported, incidents_imported, deployments_imported
 
 def import_olt_cortes(cursor):
     print("Starting OLT cuts (outages) import...")

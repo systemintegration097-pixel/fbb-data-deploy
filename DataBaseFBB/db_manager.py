@@ -1660,6 +1660,20 @@ class DBManager:
 
 
     @classmethod
+    def get_deployments_months(cls):
+        conn = cls.get_connection()
+        cursor = conn.cursor()
+        cursor.execute("""
+            SELECT DISTINCT month_year
+            FROM deployments
+            WHERE month_year IS NOT NULL AND month_year != '' AND LOWER(month_year) != 'pending'
+            ORDER BY month_year ASC
+        """)
+        rows = cursor.fetchall()
+        conn.close()
+        return [r["month_year"] for r in rows]
+
+    @classmethod
     def get_deployments_report(cls, branch="", month=""):
         conn = cls.get_connection()
         cursor = conn.cursor()

@@ -208,16 +208,10 @@ function initNavigation() {
                     });
                 }
                 
-                const monthSel = document.getElementById('deployments-filter-month');
-                if (monthSel && monthSel.options.length <= 1) {
-                    monthSel.innerHTML = '<option value="">Todos los meses</option>';
-                    const months = ['01/2026', '02/2026', '03/2026', '04/2026', '05/2026', '06/2026'];
-                    months.forEach(m => {
-                        monthSel.insertAdjacentHTML('beforeend', `<option value="${m}">${m}</option>`);
-                    });
-                }
-                
-                loadDeploymentsReport();
+                (async () => {
+                    await loadDeploymentsMonthsOptions();
+                    loadDeploymentsReport();
+                })();
             }
             
             // Leaflet map needs size recalculation when container becomes visible
@@ -2555,6 +2549,23 @@ async function loadIncidentsMonthsOptions() {
     }
 }
 
+async function loadDeploymentsMonthsOptions() {
+    try {
+        const monthSel = document.getElementById('deployments-filter-month');
+        if (!monthSel || monthSel.options.length > 1) return;
+
+        const response = await fetch('/api/fbb/deployments/months');
+        const months = await response.json();
+
+        monthSel.innerHTML = '<option value="">Todos los meses</option>';
+        months.forEach(m => {
+            monthSel.insertAdjacentHTML('beforeend', `<option value="${m}">${m}</option>`);
+        });
+    } catch (err) {
+        console.error('Error loading deployment months:', err);
+    }
+}
+
 async function loadIncidentsWeeksOptions() {
     try {
         const weekSel = document.getElementById('incidents-filter-week');
@@ -3664,15 +3675,10 @@ document.addEventListener('DOMContentLoaded', () => {
                         branchSel.insertAdjacentHTML('beforeend', `<option value="${b}">${b}</option>`);
                     });
                 }
-                const monthSel = document.getElementById('deployments-filter-month');
-                if (monthSel && monthSel.options.length <= 1) {
-                    monthSel.innerHTML = '<option value="">Todos los meses</option>';
-                    const months = ['01/2026', '02/2026', '03/2026', '04/2026', '05/2026', '06/2026'];
-                    months.forEach(m => {
-                        monthSel.insertAdjacentHTML('beforeend', `<option value="${m}">${m}</option>`);
-                    });
-                }
-                loadDeploymentsReport();
+                (async () => {
+                    await loadDeploymentsMonthsOptions();
+                    loadDeploymentsReport();
+                })();
             }
         });
     });

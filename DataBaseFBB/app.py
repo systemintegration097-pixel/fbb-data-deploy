@@ -277,13 +277,14 @@ def delete_staff(staff_id):
 @app.route("/api/sync", methods=["POST"])
 def sync_with_google_sheet():
     try:
-        zones_count, boxes_count, staff_count, incidents_count = db_importer.sync_data()
+        zones_count, boxes_count, staff_count, incidents_count, deployments_count = db_importer.sync_data()
         return jsonify({
             "message": "Sincronización exitosa desde Google Sheets",
             "zones_imported": zones_count,
             "boxes_imported": boxes_count,
             "staff_imported": staff_count,
-            "incidents_imported": incidents_count
+            "incidents_imported": incidents_count,
+            "deployments_imported": deployments_count
         })
     except Exception as e:
         return jsonify({"error": str(e)}), 500
@@ -431,6 +432,14 @@ def get_incidents_sites():
 def get_incidents_months():
     try:
         months = DBManager.get_incidents_months()
+        return jsonify(months)
+    except Exception as e:
+        return jsonify({"error": str(e)}), 500
+
+@app.route("/api/deployments/months", methods=["GET"])
+def get_deployments_months():
+    try:
+        months = DBManager.get_deployments_months()
         return jsonify(months)
     except Exception as e:
         return jsonify({"error": str(e)}), 500

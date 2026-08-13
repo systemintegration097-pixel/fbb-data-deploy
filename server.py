@@ -2283,13 +2283,14 @@ def fbb_delete_staff(staff_id):
 @app.route("/api/fbb/sync", methods=["POST"])
 def fbb_sync_with_google_sheet():
     try:
-        zones_count, boxes_count, staff_count, incidents_count = fbb_importer.sync_data()
+        zones_count, boxes_count, staff_count, incidents_count, deployments_count = fbb_importer.sync_data()
         return jsonify({
             "message": "Sincronización exitosa desde Google Sheets",
             "zones_imported": zones_count,
             "boxes_imported": boxes_count,
             "staff_imported": staff_count,
-            "incidents_imported": incidents_count
+            "incidents_imported": incidents_count,
+            "deployments_imported": deployments_count
         })
     except Exception as e:
         return jsonify({"error": str(e)}), 500
@@ -2425,6 +2426,14 @@ def fbb_get_incidents_sites():
 def fbb_get_incidents_months():
     try:
         months = FBBManager.get_incidents_months()
+        return jsonify(months)
+    except Exception as e:
+        return jsonify({"error": str(e)}), 500
+
+@app.route("/api/fbb/deployments/months", methods=["GET"])
+def fbb_get_deployments_months():
+    try:
+        months = FBBManager.get_deployments_months()
         return jsonify(months)
     except Exception as e:
         return jsonify({"error": str(e)}), 500
