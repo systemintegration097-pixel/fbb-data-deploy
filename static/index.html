@@ -782,7 +782,11 @@
                         <div>
                             <p id="deploy-pending-status-line" style="margin:0;color:#9AA0A6;font-size:13px;"><i class="fa-solid fa-spinner fa-spin"></i> Cargando resumen de despliegues pendientes...</p>
                         </div>
-                        <div style="display:flex;gap:8px;">
+                        <div style="display:flex;gap:8px;align-items:center;">
+                            <span id="deploy-timer-badge" class="timer-badge" style="display: none;">
+                                <i class="fa-regular fa-stopwatch"></i>
+                                <span id="deploy-timer-text">00:00</span>
+                            </span>
                             <button id="btn-deploy-pending-cancel" class="btn-sync" style="display:none;background:#EA4335;border-color:#EA4335;">
                                 <i class="fa-solid fa-ban"></i>
                                 <span>Cancelar</span>
@@ -2600,7 +2604,7 @@
         </div>
     </div>
 
-    <script src="app.js?v=27"></script>
+    <script src="app.js?v=28"></script>
     <!-- Leaflet.js Map (módulo FBB DATA) -->
     <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js" integrity="sha256-20nQCchB9co0qIjJZRGuk2/Z9VM+kNiyxNV1lvTlZBo=" crossorigin=""></script>
     <script src="fbb-app.js?v=2"></script>

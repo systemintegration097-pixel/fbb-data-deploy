@@ -185,6 +185,34 @@ function switchPage(pageKey) {
         _setHeaderLastUpdate("fa-regular fa-clock", "Última sincronización", _lastExcelSyncText);
     }
 
+    // "Sincronizar Excel" (botón, cronómetro, rango de meses) es información de Averías
+    // Pendientes específicamente -antes aparecía en TODAS las páginas por vivir en el
+    // header global, lo que confundía (ej. su alerta de error aparecía en Despliegues
+    // Pendientes sin tener nada que ver). Cada pestaña debe mostrar solo lo suyo.
+    const enDashboard = pageKey === "dashboard";
+    const btnSyncEl = document.getElementById("btn-sync");
+    const rangePickerEl = document.querySelector(".sync-range-picker");
+    if (btnSyncEl) btnSyncEl.style.display = enDashboard ? "" : "none";
+    if (rangePickerEl) rangePickerEl.style.display = enDashboard ? "" : "none";
+
+    // sync-timer-badge tiene su PROPIA lógica de visibilidad (se muestra/oculta según si
+    // hay una sincronización en curso, ver startSyncTimer/stopSyncTimer) -no se puede
+    // pisar con un simple "" al volver a la página o aparecería vacío aunque no haya
+    // ningún sync activo. Se recuerda el estado real que tenía antes de ocultarlo.
+    const timerBadgeEl = document.getElementById("sync-timer-badge");
+    if (timerBadgeEl) {
+        if (enDashboard) {
+            if (timerBadgeEl.dataset.hiddenForNav === "1") {
+                timerBadgeEl.style.display = timerBadgeEl.dataset.prevDisplay || "none";
+                delete timerBadgeEl.dataset.hiddenForNav;
+            }
+        } else if (timerBadgeEl.style.display !== "none") {
+            timerBadgeEl.dataset.prevDisplay = timerBadgeEl.style.display;
+            timerBadgeEl.dataset.hiddenForNav = "1";
+            timerBadgeEl.style.display = "none";
+        }
+    }
+
     if (pageKey === "credentials") {
         fetchCredentials();
     }
@@ -505,6 +533,44 @@ function stopSyncTimer(isSuccess = true) {
     } else {
         syncTimerBadge.className = "timer-badge error";
     }
+}
+
+let deployTimerInterval = null;
+let deployStartTime = null;
+
+function startDeployTimer() {
+    const badge = document.getElementById("deploy-timer-badge");
+    const text = document.getElementById("deploy-timer-text");
+    if (!badge || !text) return;
+    deployStartTime = Date.now();
+    badge.style.display = "inline-flex";
+    badge.className = "timer-badge";
+    text.textContent = "00:00";
+
+    if (deployTimerInterval) clearInterval(deployTimerInterval);
+    deployTimerInterval = setInterval(() => {
+        const elapsedSeconds = Math.floor((Date.now() - deployStartTime) / 1000);
+        const mins = String(Math.floor(elapsedSeconds / 60)).padStart(2, '0');
+        const secs = String(elapsedSeconds % 60).padStart(2, '0');
+        text.textContent = `${mins}:${secs}`;
+    }, 1000);
+}
+
+function stopDeployTimer(isSuccess = true) {
+    const badge = document.getElementById("deploy-timer-badge");
+    const text = document.getElementById("deploy-timer-text");
+    if (deployTimerInterval) {
+        clearInterval(deployTimerInterval);
+        deployTimerInterval = null;
+    }
+    if (!badge || !text) return;
+    if (deployStartTime) {
+        const totalSeconds = Math.floor((Date.now() - deployStartTime) / 1000);
+        const mins = String(Math.floor(totalSeconds / 60)).padStart(2, '0');
+        const secs = String(totalSeconds % 60).padStart(2, '0');
+        text.textContent = `${mins}:${secs}`;
+    }
+    badge.className = isSuccess ? "timer-badge completed" : "timer-badge error";
 }
 
 // Rango de meses a sincronizar (GNOC): se persiste en localStorage para que la elección
@@ -3204,6 +3270,8 @@ async function _pollDeployPendingStatusOnce() {
         }
         _setDeployPendingRunningUI(false);
 
+        stopDeployTimer(status.state === "success");
+
         if (status.state === "success") {
             await _loadDeployPending();
         } else if (status.state === "error") {
@@ -3220,6 +3288,7 @@ async function _pollDeployPendingStatusOnce() {
 
 function _startDeployPendingPolling() {
     _setDeployPendingRunningUI(true);
+    startDeployTimer();
     if (_dpRunPollInterval) clearInterval(_dpRunPollInterval);
     _pollDeployPendingStatusOnce();
     _dpRunPollInterval = setInterval(_pollDeployPendingStatusOnce, 5000);
