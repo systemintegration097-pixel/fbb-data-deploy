@@ -25,8 +25,7 @@
       <div class="map-card-header">
         <h2>Cobertura de tu sucursal</h2>
         <div class="map-tools">
-          <input id="manual-lat" type="text" inputmode="decimal" placeholder="Lat" class="coord-input">
-          <input id="manual-lng" type="text" inputmode="decimal" placeholder="Lng" class="coord-input">
+          <input id="manual-coords" type="text" placeholder="Lat, Lng (pegar aquí)" class="coord-input coord-input-wide">
           <button type="button" id="btn-place-marker" class="btn-tool">Ubicar</button>
           <button type="button" id="btn-toggle-ruler" class="btn-tool">📏 Regla</button>
           <button type="button" id="btn-clear-ruler" class="btn-tool btn-tool-ghost">Limpiar</button>
@@ -169,13 +168,18 @@
       .catch(() => { document.getElementById("map-empty-state").style.display = "block"; });
 
     let manualMarker = null;
-    document.getElementById("btn-place-marker").addEventListener("click", () => {
-      const lat = parseFloat(document.getElementById("manual-lat").value);
-      const lng = parseFloat(document.getElementById("manual-lng").value);
-      if (Number.isNaN(lat) || Number.isNaN(lng)) return;
+    function placeManualMarker() {
+      const raw = document.getElementById("manual-coords").value;
+      const parts = raw.split(",").map(s => parseFloat(s.trim()));
+      if (parts.length !== 2 || parts.some(Number.isNaN)) return;
+      const [lat, lng] = parts;
       if (manualMarker) map.removeLayer(manualMarker);
       manualMarker = L.marker([lat, lng]).addTo(map).bindPopup(`${lat}, ${lng}`).openPopup();
       map.setView([lat, lng], 15);
+    }
+    document.getElementById("btn-place-marker").addEventListener("click", placeManualMarker);
+    document.getElementById("manual-coords").addEventListener("keydown", (e) => {
+      if (e.key === "Enter") placeManualMarker();
     });
 
     let isMeasuring = false;

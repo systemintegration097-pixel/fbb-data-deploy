@@ -229,6 +229,7 @@ tr:hover td { background: #fafbff; }
   font-size: 0.82rem; background: #fff; color: var(--ink);
 }
 .coord-input:focus { outline: none; border-color: var(--accent); }
+.coord-input-wide { width: 170px; }
 
 .btn-tool {
   cursor: pointer; border: 1.5px solid var(--border); background: #fff; color: var(--ink);
