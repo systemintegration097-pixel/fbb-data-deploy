@@ -119,6 +119,7 @@ def create_app():
                 session.clear()
                 session["branch_code"] = user["branch_code"]
                 session["username"] = user["username"]
+                session["is_admin"] = bool(user["is_admin"])
                 return redirect(url_for("dashboard"))
             _register_login_failure(username)
             flash("Usuario o contraseña incorrectos.", "error")
@@ -133,9 +134,19 @@ def create_app():
     @app.route("/dashboard")
     @require_login
     def dashboard():
+        is_admin = session.get("is_admin", False)
         branch = session["branch_code"]
-        clients = db.get_active_clients_by_branch(branch)
-        return render_template("dashboard.html", branch=branch, clients=clients)
+        clients = db.get_active_clients_all() if is_admin else db.get_active_clients_by_branch(branch)
+        stats = db.compute_deploy_stats(clients)
+        return render_template(
+            "dashboard.html",
+            branch=branch,
+            clients=clients,
+            stats=stats,
+            is_admin=is_admin,
+            last_deploy_run=db.get_meta("last_deploy_run"),
+            checked_at=db.get_meta("checked_at"),
+        )
 
     @app.route("/api/my/clients/<account>/comment", methods=["POST"])
     @require_login
@@ -145,7 +156,7 @@ def create_app():
         client = db.get_client_by_account(account)
         if not client:
             return jsonify({"error": "not_found"}), 404
-        if client["branch"] != branch:
+        if client["branch"] != branch and not session.get("is_admin"):
             return jsonify({"error": "forbidden"}), 403
         data = request.get_json(silent=True) or {}
         comment = (data.get("comment") or "").strip()[:2000]
@@ -160,14 +171,14 @@ def create_app():
         client = db.get_client_by_account(account)
         if not client:
             return jsonify({"error": "not_found"}), 404
-        if client["branch"] != branch:
+        if client["branch"] != branch and not session.get("is_admin"):
             return jsonify({"error": "forbidden"}), 403
         return jsonify({"history": db.get_comment_history(account)})
 
     @app.route("/api/my/coverage")
     @require_login
     def my_coverage():
-        geojson = db.get_branch_coverage(session["branch_code"])
+        geojson = db.get_all_branch_coverage() if session.get("is_admin") else db.get_branch_coverage(session["branch_code"])
         return jsonify({"geojson": geojson})
 
     # ---------------- Machine-to-machine (API key auth) ----------------
@@ -178,6 +189,12 @@ def create_app():
         data = request.get_json(silent=True) or {}
         clients = data.get("clients", [])
         upserted, deactivated = db.sync_push_clients(clients)
+        # Metadatos globales (no por-cliente) para que el portal muestre "última
+        # actualización de despliegues" igual que el dashboard local.
+        if data.get("last_deploy_run"):
+            db.set_meta("last_deploy_run", data["last_deploy_run"])
+        if data.get("checked_at"):
+            db.set_meta("checked_at", data["checked_at"])
         return jsonify({"ok": True, "upserted": upserted, "deactivated": deactivated})
 
     @app.route("/api/sync/comments", methods=["GET"])
@@ -208,10 +225,11 @@ def create_app():
         branch_code = (data.get("branch_code") or "").strip().upper()
         username = (data.get("username") or "").strip()
         password = data.get("password") or ""
+        is_admin = bool(data.get("is_admin"))
         if not branch_code or not username or len(password) < 8:
             return jsonify({"error": "branch_code, username y password (min. 8 caracteres) son requeridos"}), 400
-        db.upsert_branch_user(branch_code, username, generate_password_hash(password))
-        return jsonify({"ok": True, "branch_code": branch_code, "username": username})
+        db.upsert_branch_user(branch_code, username, generate_password_hash(password), is_admin=is_admin)
+        return jsonify({"ok": True, "branch_code": branch_code, "username": username, "is_admin": is_admin})
 
     return app
 

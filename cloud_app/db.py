@@ -6,7 +6,7 @@ import psycopg2.extras
 DATABASE_URL = os.environ.get("DATABASE_URL", "")
 
 CLIENT_FIELDS = (
-    "partner", "shop_code", "customer_name", "phone",
+    "partner", "shop_code", "customer_name", "phone", "sale_date",
     "deployment_type", "pending_days", "ft_code", "connector_code",
 )
 
@@ -30,9 +30,11 @@ def init_db():
                     branch_code TEXT UNIQUE NOT NULL,
                     username TEXT UNIQUE NOT NULL,
                     password_hash TEXT NOT NULL,
+                    is_admin BOOLEAN DEFAULT FALSE,
                     created_at TIMESTAMPTZ DEFAULT NOW(),
                     updated_at TIMESTAMPTZ DEFAULT NOW()
                 );
+                ALTER TABLE branch_users ADD COLUMN IF NOT EXISTS is_admin BOOLEAN DEFAULT FALSE;
 
                 CREATE TABLE IF NOT EXISTS pending_clients (
                     id SERIAL PRIMARY KEY,
@@ -42,6 +44,7 @@ def init_db():
                     shop_code TEXT,
                     customer_name TEXT,
                     phone TEXT,
+                    sale_date TEXT,
                     deployment_type TEXT,
                     pending_days TEXT,
                     ft_code TEXT,
@@ -54,6 +57,7 @@ def init_db():
                     last_synced_at TIMESTAMPTZ DEFAULT NOW(),
                     is_active BOOLEAN DEFAULT TRUE
                 );
+                ALTER TABLE pending_clients ADD COLUMN IF NOT EXISTS sale_date TEXT;
                 CREATE INDEX IF NOT EXISTS idx_pending_clients_branch ON pending_clients(branch);
                 CREATE INDEX IF NOT EXISTS idx_pending_clients_active ON pending_clients(is_active);
 
@@ -72,6 +76,11 @@ def init_db():
                     branch_code TEXT PRIMARY KEY,
                     geojson JSONB NOT NULL,
                     updated_at TIMESTAMPTZ DEFAULT NOW()
+                );
+
+                CREATE TABLE IF NOT EXISTS sync_meta (
+                    key TEXT PRIMARY KEY,
+                    value TEXT
                 );
                 """
             )
@@ -92,22 +101,52 @@ def get_branch_user_by_username(username):
         conn.close()
 
 
-def upsert_branch_user(branch_code, username, password_hash):
+def upsert_branch_user(branch_code, username, password_hash, is_admin=False):
     conn = get_connection()
     try:
         with conn.cursor() as cur:
             cur.execute(
                 """
-                INSERT INTO branch_users (branch_code, username, password_hash)
-                VALUES (%s, %s, %s)
+                INSERT INTO branch_users (branch_code, username, password_hash, is_admin)
+                VALUES (%s, %s, %s, %s)
                 ON CONFLICT (branch_code) DO UPDATE SET
                     username = EXCLUDED.username,
                     password_hash = EXCLUDED.password_hash,
+                    is_admin = EXCLUDED.is_admin,
                     updated_at = NOW()
                 """,
-                (branch_code, username, password_hash),
+                (branch_code, username, password_hash, is_admin),
             )
         conn.commit()
+    finally:
+        conn.close()
+
+
+# ---------------- sync_meta (metadatos globales: última corrida, etc.) ----------------
+
+def set_meta(key, value):
+    conn = get_connection()
+    try:
+        with conn.cursor() as cur:
+            cur.execute(
+                """
+                INSERT INTO sync_meta (key, value) VALUES (%s, %s)
+                ON CONFLICT (key) DO UPDATE SET value = EXCLUDED.value
+                """,
+                (key, value),
+            )
+        conn.commit()
+    finally:
+        conn.close()
+
+
+def get_meta(key):
+    conn = get_connection()
+    try:
+        with conn.cursor() as cur:
+            cur.execute("SELECT value FROM sync_meta WHERE key = %s", (key,))
+            row = cur.fetchone()
+            return row["value"] if row else None
     finally:
         conn.close()
 
@@ -129,6 +168,35 @@ def get_active_clients_by_branch(branch):
             return cur.fetchall()
     finally:
         conn.close()
+
+
+def get_active_clients_all():
+    """Para el usuario admin: todos los clientes activos de TODAS las sucursales."""
+    conn = get_connection()
+    try:
+        with conn.cursor() as cur:
+            cur.execute(
+                """
+                SELECT * FROM pending_clients
+                WHERE is_active = TRUE
+                ORDER BY branch, deployment_type DESC, pending_days DESC
+                """
+            )
+            return cur.fetchall()
+    finally:
+        conn.close()
+
+
+def compute_deploy_stats(clients):
+    """Mismo cálculo que _loadDeployPending() en el dashboard local: total, buckets de
+    Under/Over 24h/48h/72h (Over 24h y 48h se suman en un solo número), y cuántos están
+    marcados 'Cerrar WO' en Días Pendiente (comparación case-insensitive, igual que local)."""
+    total = len(clients)
+    under24 = sum(1 for c in clients if c.get("deployment_type") == "Under 24h")
+    over2448 = sum(1 for c in clients if c.get("deployment_type") in ("Over 24h", "Over 48h"))
+    over72 = sum(1 for c in clients if c.get("deployment_type") == "Over 72h")
+    cerrar_wo = sum(1 for c in clients if (c.get("pending_days") or "").strip().lower() == "cerrar wo")
+    return {"total": total, "under24": under24, "over2448": over2448, "over72": over72, "cerrar_wo": cerrar_wo}
 
 
 def get_client_by_account(account):
@@ -225,6 +293,22 @@ def get_branch_coverage(branch_code):
             cur.execute("SELECT geojson FROM branch_coverage WHERE branch_code = %s", (branch_code,))
             row = cur.fetchone()
             return row["geojson"] if row else None
+    finally:
+        conn.close()
+
+
+def get_all_branch_coverage():
+    """Para el usuario admin: une la cobertura de TODAS las sucursales en un solo
+    FeatureCollection (cada polígono ya sabe de qué sucursal es por su propiedad 'name')."""
+    conn = get_connection()
+    try:
+        with conn.cursor() as cur:
+            cur.execute("SELECT geojson FROM branch_coverage")
+            rows = cur.fetchall()
+        features = []
+        for r in rows:
+            features.extend((r["geojson"] or {}).get("features", []))
+        return {"type": "FeatureCollection", "features": features}
     finally:
         conn.close()
 

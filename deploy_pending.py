@@ -65,6 +65,8 @@ def get_summary():
             # El teléfono llega con comas de separador de miles (formato numérico de
             # Sheets aplicado a una columna que en realidad es texto), se limpia acá.
             "phone": r[6].strip().replace(",", "") if len(r) > 6 else "",
+            # VSMART_CREATE_TIME: fecha en la que se creó la venta en el sistema.
+            "sale_date": r[12].strip() if len(r) > 12 else "",
             "deployment_type": r[14].strip() if len(r) > 14 else "",
             "pending_days": r[15].strip() if len(r) > 15 else "",
             "ft_code": r[16].strip() if len(r) > 16 else "",
@@ -230,7 +232,12 @@ def _run_worker():
             # nunca debe convertir una corrida local exitosa en un error: si la nube
             # está caída, solo se loguea.
             try:
-                cloud_sync.push_clients(get_summary()["clients"])
+                resumen = get_summary()
+                cloud_sync.push_clients(
+                    resumen["clients"],
+                    last_deploy_run=resumen.get("last_deploy_run"),
+                    checked_at=resumen.get("checked_at"),
+                )
             except Exception as e:
                 print(f"[deploy_pending] No se pudo subir a la nube (no afecta el resultado local): {e}")
     except Exception as e:

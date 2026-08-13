@@ -11,8 +11,13 @@
 <body>
   <header class="topbar">
     <div>
-      <strong>Sucursal {{ branch }}</strong>
+      <strong>{{ "Todas las sucursales (Admin)" if is_admin else "Sucursal " + branch }}</strong>
       <span class="muted">Despliegues pendientes ({{ clients|length }})</span>
+      <p class="last-update-line">
+        <i class="fa-regular fa-clock"></i>
+        Última actualización de despliegues: <strong>{{ last_deploy_run or "sin registro" }}</strong>
+        &middot; datos leídos: {{ checked_at or "—" }}
+      </p>
     </div>
     <form method="post" action="{{ url_for('logout') }}">
       <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
@@ -21,9 +26,32 @@
   </header>
 
   <main>
+    <section class="stats-grid">
+      <div class="stat-card">
+        <span class="stat-label">Total Pendientes</span>
+        <span class="stat-value">{{ stats.total }}</span>
+      </div>
+      <div class="stat-card">
+        <span class="stat-label">Under 24h</span>
+        <span class="stat-value stat-green">{{ stats.under24 }}</span>
+      </div>
+      <div class="stat-card">
+        <span class="stat-label">Over 24h / 48h</span>
+        <span class="stat-value stat-amber">{{ stats.over2448 }}</span>
+      </div>
+      <div class="stat-card">
+        <span class="stat-label">Over 72h</span>
+        <span class="stat-value stat-red">{{ stats.over72 }}</span>
+      </div>
+      <div class="stat-card">
+        <span class="stat-label">Cerrar WO</span>
+        <span class="stat-value stat-purple">{{ stats.cerrar_wo }}</span>
+      </div>
+    </section>
+
     <section class="map-card">
       <div class="map-card-header">
-        <h2>Cobertura de tu sucursal</h2>
+        <h2>{{ "Cobertura de todas las sucursales" if is_admin else "Cobertura de tu sucursal" }}</h2>
         <div class="map-tools">
           <input id="manual-coords" type="text" placeholder="Lat, Lng (pegar aquí)" class="coord-input coord-input-wide">
           <button type="button" id="btn-place-marker" class="btn-tool">Ubicar</button>
@@ -40,6 +68,11 @@
       <p class="empty-state">No hay despliegues pendientes para tu sucursal en este momento.</p>
     {% else %}
     <div class="filters-bar">
+      {% if is_admin %}
+      <select id="filter-branch" class="btn-tool filter-select">
+        <option value="">Todas las sucursales</option>
+      </select>
+      {% endif %}
       <select id="filter-partner" class="btn-tool filter-select">
         <option value="">Todos los partners</option>
       </select>
@@ -62,11 +95,13 @@
     <table>
       <thead>
         <tr>
+          {% if is_admin %}<th>Branch</th>{% endif %}
           <th>Account</th>
           <th>Cliente</th>
           <th>Teléfono</th>
           <th>Partner</th>
           <th>Sales Code</th>
+          <th>Fecha de Venta</th>
           <th>Tipo</th>
           <th>Días Pendiente</th>
           <th>Estado</th>
@@ -76,12 +111,14 @@
       </thead>
       <tbody id="clients-tbody">
         {% for c in clients %}
-        <tr class="{{ 'row-over72' if c.deployment_type == 'Over 72h' else '' }}" data-account="{{ c.account }}" data-partner="{{ c.partner or '' }}" data-shop-code="{{ c.shop_code or '' }}">
+        <tr class="{{ 'row-over72' if c.deployment_type == 'Over 72h' else '' }}" data-account="{{ c.account }}" data-partner="{{ c.partner or '' }}" data-shop-code="{{ c.shop_code or '' }}" data-branch="{{ c.branch or '' }}">
+          {% if is_admin %}<td class="mono">{{ c.branch }}</td>{% endif %}
           <td>{{ c.account }}</td>
           <td>{{ c.customer_name }}</td>
           <td>{{ c.phone }}</td>
           <td>{{ c.partner }}</td>
           <td class="mono">{{ c.shop_code or "—" }}</td>
+          <td>{{ c.sale_date or "—" }}</td>
           <td>{{ c.deployment_type }}</td>
           <td>{{ c.pending_days }}</td>
           <td><input type="text" class="status-input" value="{{ c.status or '' }}" maxlength="80"></td>
@@ -166,6 +203,15 @@
       const rows = [...document.querySelectorAll("#clients-tbody tr[data-account]")];
       if (!rows.length) return;
 
+      const branchSelect = document.getElementById("filter-branch"); // solo existe si es admin
+      if (branchSelect) {
+        [...new Set(rows.map(r => r.dataset.branch).filter(Boolean))].sort().forEach(b => {
+          const opt = document.createElement("option");
+          opt.value = b; opt.textContent = b;
+          branchSelect.appendChild(opt);
+        });
+      }
+
       const partnerSelect = document.getElementById("filter-partner");
       [...new Set(rows.map(r => r.dataset.partner).filter(Boolean))].sort().forEach(p => {
         const opt = document.createElement("option");
@@ -183,10 +229,11 @@
       const salesCodeCheckboxes = [...checkboxesContainer.querySelectorAll("input[type=checkbox]")];
 
       const searchInput = document.getElementById("client-search");
-      // Solo las primeras 7 columnas son texto estático (Account..Días Pendiente) -las
-      // últimas 3 son el input de Estado, el textarea de Comentario y los botones, que no
-      // deben entrar en la búsqueda. Se precalcula una vez por fila, no en cada tecla.
-      const rowSearchText = new Map(rows.map(row => [row, [...row.cells].slice(0, 7).map(td => td.textContent).join(" ").toLowerCase()]));
+      // Las últimas 3 columnas son el input de Estado, el textarea de Comentario y los
+      // botones -no deben entrar en la búsqueda. El resto sí (Branch solo existe si es
+      // admin, por eso se resta desde el final en vez de un índice fijo). Se precalcula
+      // una vez por fila, no en cada tecla.
+      const rowSearchText = new Map(rows.map(row => [row, [...row.cells].slice(0, row.cells.length - 3).map(td => td.textContent).join(" ").toLowerCase()]));
 
       const toggle = document.getElementById("salescode-filter-toggle");
       const panel = document.getElementById("salescode-filter-panel");
@@ -196,15 +243,17 @@
       });
 
       function applyFilters() {
+        const branchVal = branchSelect ? branchSelect.value : "";
         const partner = partnerSelect.value;
         const selectedCodes = salesCodeCheckboxes.filter(cb => cb.checked).map(cb => cb.value);
         const searchTerm = searchInput.value.trim().toLowerCase();
         let visible = 0;
         rows.forEach(row => {
+          const matchesBranch = !branchVal || row.dataset.branch === branchVal;
           const matchesPartner = !partner || row.dataset.partner === partner;
           const matchesCode = !selectedCodes.length || selectedCodes.includes(row.dataset.shopCode);
           const matchesSearch = !searchTerm || rowSearchText.get(row).includes(searchTerm);
-          const show = matchesPartner && matchesCode && matchesSearch;
+          const show = matchesBranch && matchesPartner && matchesCode && matchesSearch;
           row.style.display = show ? "" : "none";
           if (show) visible++;
         });
@@ -223,12 +272,14 @@
         applyFilters();
       });
       document.getElementById("btn-clear-filters").addEventListener("click", () => {
+        if (branchSelect) branchSelect.value = "";
         partnerSelect.value = "";
         salesCodeCheckboxes.forEach(cb => cb.checked = false);
         searchInput.value = "";
         applyFilters();
       });
 
+      if (branchSelect) branchSelect.addEventListener("change", applyFilters);
       partnerSelect.addEventListener("change", applyFilters);
       salesCodeCheckboxes.forEach(cb => cb.addEventListener("change", applyFilters));
       searchInput.addEventListener("input", applyFilters);

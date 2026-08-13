@@ -35,16 +35,18 @@ def _headers():
     return {"X-API-Key": CLOUD_API_KEY, "Content-Type": "application/json"}
 
 
-def push_clients(clients):
+def push_clients(clients, last_deploy_run=None, checked_at=None):
     """Sube la lista fresca de despliegues pendientes a la nube (full-refresh:
     la nube desactiva ahí mismo cualquier cuenta que ya no venga en la lista,
-    sin perder el comentario que un encargado ya haya dejado)."""
+    sin perder el comentario que un encargado ya haya dejado). last_deploy_run/
+    checked_at son metadatos globales (no por-cliente) para que el portal en la
+    nube pueda mostrar "última actualización de despliegues" igual que local."""
     if not is_configured():
         return {"ok": False, "error": "cloud sync no configurado (CLOUD_SYNC_URL/CLOUD_API_KEY)"}
     try:
         resp = requests.post(
             f"{CLOUD_SYNC_URL}/api/sync/push",
-            json={"clients": clients},
+            json={"clients": clients, "last_deploy_run": last_deploy_run, "checked_at": checked_at},
             headers=_headers(),
             timeout=REQUEST_TIMEOUT_SEC,
         )
