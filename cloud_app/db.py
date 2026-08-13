@@ -1,8 +1,9 @@
 import os
-import sqlite3
 
-BASE_DIR = os.path.dirname(os.path.abspath(__file__))
-DB_PATH = os.environ.get("DATABASE_PATH", os.path.join(BASE_DIR, "cloud.db"))
+import psycopg2
+import psycopg2.extras
+
+DATABASE_URL = os.environ.get("DATABASE_URL", "")
 
 CLIENT_FIELDS = (
     "partner", "shop_code", "customer_name", "phone",
@@ -11,50 +12,52 @@ CLIENT_FIELDS = (
 
 
 def get_connection():
-    conn = sqlite3.connect(DB_PATH, timeout=10)
-    conn.row_factory = sqlite3.Row
-    conn.execute("PRAGMA journal_mode=WAL")
+    if not DATABASE_URL:
+        raise RuntimeError("DATABASE_URL no está configurado (ver cloud_app/.env.example).")
+    conn = psycopg2.connect(DATABASE_URL, cursor_factory=psycopg2.extras.RealDictCursor)
+    conn.autocommit = False
     return conn
 
 
 def init_db():
     conn = get_connection()
     try:
-        conn.executescript(
-            """
-            CREATE TABLE IF NOT EXISTS branch_users (
-                id INTEGER PRIMARY KEY AUTOINCREMENT,
-                branch_code TEXT UNIQUE NOT NULL,
-                username TEXT UNIQUE NOT NULL,
-                password_hash TEXT NOT NULL,
-                created_at TEXT DEFAULT (datetime('now')),
-                updated_at TEXT DEFAULT (datetime('now'))
-            );
+        with conn.cursor() as cur:
+            cur.execute(
+                """
+                CREATE TABLE IF NOT EXISTS branch_users (
+                    id SERIAL PRIMARY KEY,
+                    branch_code TEXT UNIQUE NOT NULL,
+                    username TEXT UNIQUE NOT NULL,
+                    password_hash TEXT NOT NULL,
+                    created_at TIMESTAMPTZ DEFAULT NOW(),
+                    updated_at TIMESTAMPTZ DEFAULT NOW()
+                );
 
-            CREATE TABLE IF NOT EXISTS pending_clients (
-                id INTEGER PRIMARY KEY AUTOINCREMENT,
-                account TEXT UNIQUE NOT NULL,
-                branch TEXT NOT NULL,
-                partner TEXT,
-                shop_code TEXT,
-                customer_name TEXT,
-                phone TEXT,
-                deployment_type TEXT,
-                pending_days TEXT,
-                ft_code TEXT,
-                connector_code TEXT,
-                comment TEXT DEFAULT '',
-                status TEXT DEFAULT '',
-                comment_updated_by TEXT,
-                comment_updated_at TEXT,
-                first_synced_at TEXT DEFAULT (datetime('now')),
-                last_synced_at TEXT DEFAULT (datetime('now')),
-                is_active INTEGER DEFAULT 1
-            );
-            CREATE INDEX IF NOT EXISTS idx_pending_clients_branch ON pending_clients(branch);
-            CREATE INDEX IF NOT EXISTS idx_pending_clients_active ON pending_clients(is_active);
-            """
-        )
+                CREATE TABLE IF NOT EXISTS pending_clients (
+                    id SERIAL PRIMARY KEY,
+                    account TEXT UNIQUE NOT NULL,
+                    branch TEXT NOT NULL,
+                    partner TEXT,
+                    shop_code TEXT,
+                    customer_name TEXT,
+                    phone TEXT,
+                    deployment_type TEXT,
+                    pending_days TEXT,
+                    ft_code TEXT,
+                    connector_code TEXT,
+                    comment TEXT DEFAULT '',
+                    status TEXT DEFAULT '',
+                    comment_updated_by TEXT,
+                    comment_updated_at TIMESTAMPTZ,
+                    first_synced_at TIMESTAMPTZ DEFAULT NOW(),
+                    last_synced_at TIMESTAMPTZ DEFAULT NOW(),
+                    is_active BOOLEAN DEFAULT TRUE
+                );
+                CREATE INDEX IF NOT EXISTS idx_pending_clients_branch ON pending_clients(branch);
+                CREATE INDEX IF NOT EXISTS idx_pending_clients_active ON pending_clients(is_active);
+                """
+            )
         conn.commit()
     finally:
         conn.close()
@@ -65,9 +68,9 @@ def init_db():
 def get_branch_user_by_username(username):
     conn = get_connection()
     try:
-        return conn.execute(
-            "SELECT * FROM branch_users WHERE username = ?", (username,)
-        ).fetchone()
+        with conn.cursor() as cur:
+            cur.execute("SELECT * FROM branch_users WHERE username = %s", (username,))
+            return cur.fetchone()
     finally:
         conn.close()
 
@@ -75,17 +78,18 @@ def get_branch_user_by_username(username):
 def upsert_branch_user(branch_code, username, password_hash):
     conn = get_connection()
     try:
-        conn.execute(
-            """
-            INSERT INTO branch_users (branch_code, username, password_hash)
-            VALUES (?, ?, ?)
-            ON CONFLICT(branch_code) DO UPDATE SET
-                username = excluded.username,
-                password_hash = excluded.password_hash,
-                updated_at = datetime('now')
-            """,
-            (branch_code, username, password_hash),
-        )
+        with conn.cursor() as cur:
+            cur.execute(
+                """
+                INSERT INTO branch_users (branch_code, username, password_hash)
+                VALUES (%s, %s, %s)
+                ON CONFLICT (branch_code) DO UPDATE SET
+                    username = EXCLUDED.username,
+                    password_hash = EXCLUDED.password_hash,
+                    updated_at = NOW()
+                """,
+                (branch_code, username, password_hash),
+            )
         conn.commit()
     finally:
         conn.close()
@@ -96,14 +100,16 @@ def upsert_branch_user(branch_code, username, password_hash):
 def get_active_clients_by_branch(branch):
     conn = get_connection()
     try:
-        return conn.execute(
-            """
-            SELECT * FROM pending_clients
-            WHERE branch = ? AND is_active = 1
-            ORDER BY deployment_type DESC, pending_days DESC
-            """,
-            (branch,),
-        ).fetchall()
+        with conn.cursor() as cur:
+            cur.execute(
+                """
+                SELECT * FROM pending_clients
+                WHERE branch = %s AND is_active = TRUE
+                ORDER BY deployment_type DESC, pending_days DESC
+                """,
+                (branch,),
+            )
+            return cur.fetchall()
     finally:
         conn.close()
 
@@ -111,9 +117,9 @@ def get_active_clients_by_branch(branch):
 def get_client_by_account(account):
     conn = get_connection()
     try:
-        return conn.execute(
-            "SELECT * FROM pending_clients WHERE account = ?", (account,)
-        ).fetchone()
+        with conn.cursor() as cur:
+            cur.execute("SELECT * FROM pending_clients WHERE account = %s", (account,))
+            return cur.fetchone()
     finally:
         conn.close()
 
@@ -121,14 +127,15 @@ def get_client_by_account(account):
 def update_client_comment(account, comment, status, updated_by):
     conn = get_connection()
     try:
-        conn.execute(
-            """
-            UPDATE pending_clients
-            SET comment = ?, status = ?, comment_updated_by = ?, comment_updated_at = datetime('now')
-            WHERE account = ?
-            """,
-            (comment, status, updated_by, account),
-        )
+        with conn.cursor() as cur:
+            cur.execute(
+                """
+                UPDATE pending_clients
+                SET comment = %s, status = %s, comment_updated_by = %s, comment_updated_at = NOW()
+                WHERE account = %s
+                """,
+                (comment, status, updated_by, account),
+            )
         conn.commit()
     finally:
         conn.close()
@@ -142,37 +149,37 @@ def sync_push_clients(clients):
     upserted = 0
     deactivated = 0
     try:
-        seen_accounts = []
-        for c in clients:
-            account = (c.get("account") or "").strip()
-            if not account:
-                continue
-            seen_accounts.append(account)
-            values = [c.get(field, "") or "" for field in CLIENT_FIELDS]
-            conn.execute(
-                f"""
-                INSERT INTO pending_clients (account, branch, {", ".join(CLIENT_FIELDS)}, last_synced_at, is_active)
-                VALUES (?, ?, {", ".join(["?"] * len(CLIENT_FIELDS))}, datetime('now'), 1)
-                ON CONFLICT(account) DO UPDATE SET
-                    branch = excluded.branch,
-                    {", ".join(f"{f} = excluded.{f}" for f in CLIENT_FIELDS)},
-                    last_synced_at = datetime('now'),
-                    is_active = 1
-                """,
-                [account, c.get("branch", "") or ""] + values,
-            )
-            upserted += 1
+        with conn.cursor() as cur:
+            seen_accounts = []
+            for c in clients:
+                account = (c.get("account") or "").strip()
+                if not account:
+                    continue
+                seen_accounts.append(account)
+                values = [c.get(field, "") or "" for field in CLIENT_FIELDS]
+                cur.execute(
+                    f"""
+                    INSERT INTO pending_clients (account, branch, {", ".join(CLIENT_FIELDS)}, last_synced_at, is_active)
+                    VALUES (%s, %s, {", ".join(["%s"] * len(CLIENT_FIELDS))}, NOW(), TRUE)
+                    ON CONFLICT (account) DO UPDATE SET
+                        branch = EXCLUDED.branch,
+                        {", ".join(f"{f} = EXCLUDED.{f}" for f in CLIENT_FIELDS)},
+                        last_synced_at = NOW(),
+                        is_active = TRUE
+                    """,
+                    [account, c.get("branch", "") or ""] + values,
+                )
+                upserted += 1
 
-        if seen_accounts:
-            placeholders = ", ".join(["?"] * len(seen_accounts))
-            cur = conn.execute(
-                f"""
-                UPDATE pending_clients SET is_active = 0
-                WHERE is_active = 1 AND account NOT IN ({placeholders})
-                """,
-                seen_accounts,
-            )
-            deactivated = cur.rowcount
+            if seen_accounts:
+                cur.execute(
+                    """
+                    UPDATE pending_clients SET is_active = FALSE
+                    WHERE is_active = TRUE AND account != ALL(%s)
+                    """,
+                    (seen_accounts,),
+                )
+                deactivated = cur.rowcount
 
         conn.commit()
         return upserted, deactivated
@@ -183,23 +190,31 @@ def sync_push_clients(clients):
 def get_comments_since(since_iso=None):
     conn = get_connection()
     try:
-        if since_iso:
-            rows = conn.execute(
-                """
-                SELECT account, branch, comment, status, comment_updated_by, comment_updated_at
-                FROM pending_clients
-                WHERE comment_updated_at IS NOT NULL AND comment_updated_at > ?
-                """,
-                (since_iso,),
-            ).fetchall()
-        else:
-            rows = conn.execute(
-                """
-                SELECT account, branch, comment, status, comment_updated_by, comment_updated_at
-                FROM pending_clients
-                WHERE comment_updated_at IS NOT NULL
-                """
-            ).fetchall()
-        return [dict(r) for r in rows]
+        with conn.cursor() as cur:
+            if since_iso:
+                cur.execute(
+                    """
+                    SELECT account, branch, comment, status, comment_updated_by, comment_updated_at
+                    FROM pending_clients
+                    WHERE comment_updated_at IS NOT NULL AND comment_updated_at > %s
+                    """,
+                    (since_iso,),
+                )
+            else:
+                cur.execute(
+                    """
+                    SELECT account, branch, comment, status, comment_updated_by, comment_updated_at
+                    FROM pending_clients
+                    WHERE comment_updated_at IS NOT NULL
+                    """
+                )
+            rows = cur.fetchall()
+        result = []
+        for r in rows:
+            d = dict(r)
+            if d.get("comment_updated_at") is not None:
+                d["comment_updated_at"] = d["comment_updated_at"].isoformat(sep=" ", timespec="seconds")
+            result.append(d)
+        return result
     finally:
         conn.close()
