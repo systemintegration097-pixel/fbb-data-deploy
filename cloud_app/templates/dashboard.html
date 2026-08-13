@@ -39,6 +39,23 @@
     {% if not clients %}
       <p class="empty-state">No hay despliegues pendientes para tu sucursal en este momento.</p>
     {% else %}
+    <div class="filters-bar">
+      <select id="filter-partner" class="btn-tool filter-select">
+        <option value="">Todos los partners</option>
+      </select>
+      <div class="multiselect" id="salescode-filter">
+        <button type="button" class="btn-tool" id="salescode-filter-toggle">Sales Code <span id="salescode-filter-badge" class="filter-badge" hidden>0</span> ▾</button>
+        <div class="multiselect-panel" id="salescode-filter-panel" hidden>
+          <div class="multiselect-actions">
+            <button type="button" id="salescode-select-all">Todos</button>
+            <button type="button" id="salescode-select-none">Ninguno</button>
+          </div>
+          <div id="salescode-checkboxes"></div>
+        </div>
+      </div>
+      <button type="button" class="btn-tool btn-tool-ghost" id="btn-clear-filters">Limpiar filtros</button>
+      <span id="filter-count" class="muted"></span>
+    </div>
     <table>
       <thead>
         <tr>
@@ -54,9 +71,9 @@
           <th></th>
         </tr>
       </thead>
-      <tbody>
+      <tbody id="clients-tbody">
         {% for c in clients %}
-        <tr class="{{ 'row-over72' if c.deployment_type == 'Over 72h' else '' }}" data-account="{{ c.account }}">
+        <tr class="{{ 'row-over72' if c.deployment_type == 'Over 72h' else '' }}" data-account="{{ c.account }}" data-partner="{{ c.partner or '' }}" data-shop-code="{{ c.shop_code or '' }}">
           <td>{{ c.account }}</td>
           <td>{{ c.customer_name }}</td>
           <td>{{ c.phone }}</td>
@@ -140,6 +157,71 @@
         body.innerHTML = "<p class='muted'>No se pudo cargar el historial.</p>";
       }
     }
+
+    // ---------------- Filtros: Partner + Sales Code (multi) ----------------
+    (function setupFilters() {
+      const rows = [...document.querySelectorAll("#clients-tbody tr[data-account]")];
+      if (!rows.length) return;
+
+      const partnerSelect = document.getElementById("filter-partner");
+      [...new Set(rows.map(r => r.dataset.partner).filter(Boolean))].sort().forEach(p => {
+        const opt = document.createElement("option");
+        opt.value = p; opt.textContent = p;
+        partnerSelect.appendChild(opt);
+      });
+
+      const checkboxesContainer = document.getElementById("salescode-checkboxes");
+      [...new Set(rows.map(r => r.dataset.shopCode).filter(Boolean))].sort().forEach(code => {
+        const label = document.createElement("label");
+        label.className = "multiselect-item";
+        label.innerHTML = `<input type="checkbox" value="${code}"> ${code}`;
+        checkboxesContainer.appendChild(label);
+      });
+      const salesCodeCheckboxes = [...checkboxesContainer.querySelectorAll("input[type=checkbox]")];
+
+      const toggle = document.getElementById("salescode-filter-toggle");
+      const panel = document.getElementById("salescode-filter-panel");
+      toggle.addEventListener("click", () => { panel.hidden = !panel.hidden; });
+      document.addEventListener("click", (e) => {
+        if (!document.getElementById("salescode-filter").contains(e.target)) panel.hidden = true;
+      });
+
+      function applyFilters() {
+        const partner = partnerSelect.value;
+        const selectedCodes = salesCodeCheckboxes.filter(cb => cb.checked).map(cb => cb.value);
+        let visible = 0;
+        rows.forEach(row => {
+          const matchesPartner = !partner || row.dataset.partner === partner;
+          const matchesCode = !selectedCodes.length || selectedCodes.includes(row.dataset.shopCode);
+          const show = matchesPartner && matchesCode;
+          row.style.display = show ? "" : "none";
+          if (show) visible++;
+        });
+        document.getElementById("filter-count").textContent = `${visible} de ${rows.length}`;
+        const badge = document.getElementById("salescode-filter-badge");
+        if (selectedCodes.length) { badge.hidden = false; badge.textContent = selectedCodes.length; }
+        else { badge.hidden = true; }
+      }
+
+      document.getElementById("salescode-select-all").addEventListener("click", () => {
+        salesCodeCheckboxes.forEach(cb => cb.checked = true);
+        applyFilters();
+      });
+      document.getElementById("salescode-select-none").addEventListener("click", () => {
+        salesCodeCheckboxes.forEach(cb => cb.checked = false);
+        applyFilters();
+      });
+      document.getElementById("btn-clear-filters").addEventListener("click", () => {
+        partnerSelect.value = "";
+        salesCodeCheckboxes.forEach(cb => cb.checked = false);
+        applyFilters();
+      });
+
+      partnerSelect.addEventListener("change", applyFilters);
+      salesCodeCheckboxes.forEach(cb => cb.addEventListener("change", applyFilters));
+
+      applyFilters();
+    })();
 
     // ---------------- Mapa de cobertura KML + regla de distancia ----------------
     const map = L.map("coverage-map", { scrollWheelZoom: true }).setView([-9.19, -75.0152], 6);
