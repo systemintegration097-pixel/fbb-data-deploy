@@ -82,3 +82,23 @@ def pull_comments():
 def get_cached_comments():
     with _comments_lock:
         return dict(_comments_cache)
+
+
+def push_coverage(branch_code, geojson_obj):
+    """Sube (reemplaza) la cobertura KML de UNA sucursal. Se corre manualmente
+    (ver build_and_push_coverage.py) ya que la cobertura casi no cambia -- no
+    hace falta engancharlo al ciclo de sync de cada corrida de despliegues."""
+    if not is_configured():
+        return {"ok": False, "error": "cloud sync no configurado (CLOUD_SYNC_URL/CLOUD_API_KEY)"}
+    try:
+        resp = requests.post(
+            f"{CLOUD_SYNC_URL}/api/sync/push_coverage",
+            json={"branch_code": branch_code, "geojson": geojson_obj},
+            headers=_headers(),
+            timeout=REQUEST_TIMEOUT_SEC,
+        )
+        resp.raise_for_status()
+        return resp.json()
+    except Exception as e:
+        print(f"[cloud_sync] push_coverage FALLÓ para {branch_code}: {e}")
+        return {"ok": False, "error": str(e)}

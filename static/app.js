@@ -3116,7 +3116,7 @@ function _renderDeployPendingClients() {
     }
 
     if (!rows.length) {
-        tbody.innerHTML = '<tr><td colspan="9" class="text-center" style="color:#9AA0A6;">Sin resultados con estos filtros.</td></tr>';
+        tbody.innerHTML = '<tr><td colspan="10" class="text-center" style="color:#9AA0A6;">Sin resultados con estos filtros.</td></tr>';
         return;
     }
 
@@ -3134,12 +3134,13 @@ function _renderDeployPendingClients() {
             <td>${c.customer_name || "—"}</td>
             <td>${c.phone || "—"}</td>
             <td>${c.partner || "—"}</td>
+            <td style="font-family:monospace;font-size:11px;">${c.shop_code || "—"}</td>
             <td><span style="color:${tipoColor(c.deployment_type)};font-weight:600;">${c.deployment_type || "—"}</span></td>
             <td class="text-center">${c.pending_days || "—"}</td>
             <td style="font-family:monospace;font-size:10px;">${c.connector_code || "—"}</td>
             <td style="max-width:220px;">${commentCell}</td>
         </tr>`;
-    }).join("") + (rows.length > 500 ? `<tr><td colspan="9" class="text-center" style="color:#9AA0A6;">Mostrando 500 de ${rows.length} resultados — afina la búsqueda para ver más.</td></tr>` : "");
+    }).join("") + (rows.length > 500 ? `<tr><td colspan="10" class="text-center" style="color:#9AA0A6;">Mostrando 500 de ${rows.length} resultados — afina la búsqueda para ver más.</td></tr>` : "");
 }
 
 const _dpRunBtnOriginalHtml = '<i class="fa-solid fa-arrows-rotate"></i> <span>Actualizar Despliegues</span>';

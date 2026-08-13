@@ -191,4 +191,73 @@ tr:hover td { background: #fafbff; }
 .btn-save { background: linear-gradient(135deg, var(--accent), var(--accent-2)); color: #fff; white-space: nowrap; }
 .btn-save:hover { transform: translateY(-1px); }
 
+.row-actions { display: flex; gap: 6px; align-items: center; }
+.btn-history {
+  cursor: pointer; border: 1.5px solid var(--border); background: #fff; border-radius: 8px;
+  padding: 0.4rem 0.55rem; font-size: 0.95rem; transition: border-color 0.15s, transform 0.1s;
+}
+.btn-history:hover { border-color: var(--accent); transform: translateY(-1px); }
+
+.mono { font-family: ui-monospace, "SFMono-Regular", Menlo, Consolas, monospace; font-size: 0.8rem; }
+
 .empty-state { color: var(--muted); padding: 3rem; text-align: center; font-size: 0.95rem; }
+
+/* ---------------- Mapa de cobertura ---------------- */
+
+.map-card {
+  background: var(--card);
+  border-radius: var(--radius);
+  box-shadow: var(--shadow);
+  margin-bottom: 1.5rem;
+  overflow: hidden;
+}
+
+.map-card-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 0.75rem;
+  padding: 1rem 1.25rem;
+  border-bottom: 1px solid var(--border);
+}
+.map-card-header h2 { font-size: 1rem; margin: 0; font-weight: 700; letter-spacing: -0.01em; }
+
+.map-tools { display: flex; gap: 8px; align-items: center; flex-wrap: wrap; }
+.coord-input {
+  width: 90px; padding: 0.45rem 0.6rem; border: 1.5px solid var(--border); border-radius: 8px;
+  font-size: 0.82rem; background: #fff; color: var(--ink);
+}
+.coord-input:focus { outline: none; border-color: var(--accent); }
+
+.btn-tool {
+  cursor: pointer; border: 1.5px solid var(--border); background: #fff; color: var(--ink);
+  border-radius: 8px; padding: 0.45rem 0.75rem; font-size: 0.82rem; font-weight: 600;
+  transition: all 0.15s;
+}
+.btn-tool:hover { border-color: var(--accent); }
+.btn-tool-active { background: var(--accent); color: #fff; border-color: var(--accent); }
+.btn-tool-ghost { background: transparent; color: var(--muted); }
+
+.ruler-output { font-size: 0.85rem; font-weight: 700; color: var(--accent); min-width: 70px; }
+
+#coverage-map { height: 380px; width: 100%; }
+
+/* ---------------- Historial (dialog nativo) ---------------- */
+
+dialog#history-dialog {
+  border: none;
+  border-radius: var(--radius);
+  box-shadow: var(--shadow);
+  padding: 1.5rem;
+  width: 90%;
+  max-width: 480px;
+}
+dialog#history-dialog::backdrop { background: rgba(20, 24, 31, 0.45); backdrop-filter: blur(2px); }
+dialog#history-dialog h3 { margin: 0 0 1rem; font-size: 1.05rem; }
+
+.history-body { max-height: 320px; overflow-y: auto; margin-bottom: 1rem; }
+.history-entry { padding: 0.75rem 0; border-bottom: 1px solid var(--border); }
+.history-entry:last-child { border-bottom: none; }
+.history-meta { font-size: 0.75rem; color: var(--muted); margin-bottom: 0.25rem; }
+.history-text { font-size: 0.88rem; }

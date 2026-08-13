@@ -4,6 +4,8 @@
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <title>Despliegues Pendientes — {{ branch }}</title>
+  <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css"
+        integrity="sha256-p4NxAoJBhIIN+hmNHrzRCf9tD/miZyoHS5obTRR9BMY=" crossorigin="">
   <link rel="stylesheet" href="{{ url_for('static', filename='style.css') }}">
 </head>
 <body>
@@ -19,6 +21,22 @@
   </header>
 
   <main>
+    <section class="map-card">
+      <div class="map-card-header">
+        <h2>Cobertura de tu sucursal</h2>
+        <div class="map-tools">
+          <input id="manual-lat" type="text" inputmode="decimal" placeholder="Lat" class="coord-input">
+          <input id="manual-lng" type="text" inputmode="decimal" placeholder="Lng" class="coord-input">
+          <button type="button" id="btn-place-marker" class="btn-tool">Ubicar</button>
+          <button type="button" id="btn-toggle-ruler" class="btn-tool">📏 Regla</button>
+          <button type="button" id="btn-clear-ruler" class="btn-tool btn-tool-ghost">Limpiar</button>
+          <span id="ruler-output" class="ruler-output"></span>
+        </div>
+      </div>
+      <div id="coverage-map"></div>
+      <p id="map-empty-state" class="empty-state" style="display:none;">Todavía no hay cobertura KML cargada para tu sucursal.</p>
+    </section>
+
     {% if not clients %}
       <p class="empty-state">No hay despliegues pendientes para tu sucursal en este momento.</p>
     {% else %}
@@ -29,6 +47,7 @@
           <th>Cliente</th>
           <th>Teléfono</th>
           <th>Partner</th>
+          <th>Sales Code</th>
           <th>Tipo</th>
           <th>Días Pendiente</th>
           <th>Estado</th>
@@ -43,11 +62,15 @@
           <td>{{ c.customer_name }}</td>
           <td>{{ c.phone }}</td>
           <td>{{ c.partner }}</td>
+          <td class="mono">{{ c.shop_code or "—" }}</td>
           <td>{{ c.deployment_type }}</td>
           <td>{{ c.pending_days }}</td>
           <td><input type="text" class="status-input" value="{{ c.status or '' }}" maxlength="80"></td>
           <td><textarea class="comment-input" rows="2" maxlength="2000">{{ c.comment or '' }}</textarea></td>
-          <td><button type="button" class="btn-save" onclick="saveComment(this)">Guardar</button></td>
+          <td class="row-actions">
+            <button type="button" class="btn-save" onclick="saveComment(this)">Guardar</button>
+            <button type="button" class="btn-history" onclick="openHistory(this)" title="Ver comentarios anteriores">🕓</button>
+          </td>
         </tr>
         {% endfor %}
       </tbody>
@@ -55,6 +78,14 @@
     {% endif %}
   </main>
 
+  <dialog id="history-dialog">
+    <h3 id="history-title">Historial de comentarios</h3>
+    <div id="history-body" class="history-body"></div>
+    <button type="button" class="btn-secondary" onclick="document.getElementById('history-dialog').close()">Cerrar</button>
+  </dialog>
+
+  <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"
+          integrity="sha256-20nQCchB9co0qIjJZRGuk2/Z9VM+kNiyxNV1lvTlZBo=" crossorigin=""></script>
   <script>
     const CSRF_TOKEN = "{{ csrf_token() }}";
 
@@ -83,6 +114,103 @@
         }, 1500);
       }
     }
+
+    async function openHistory(btn) {
+      const row = btn.closest("tr");
+      const account = row.dataset.account;
+      const dialog = document.getElementById("history-dialog");
+      const body = document.getElementById("history-body");
+      document.getElementById("history-title").textContent = `Historial — ${account}`;
+      body.innerHTML = "<p class='muted'>Cargando...</p>";
+      dialog.showModal();
+      try {
+        const resp = await fetch(`/api/my/clients/${encodeURIComponent(account)}/history`);
+        const data = await resp.json();
+        const history = data.history || [];
+        if (!history.length) {
+          body.innerHTML = "<p class='muted'>Todavía no hay comentarios anteriores para este cliente.</p>";
+          return;
+        }
+        body.innerHTML = history.map(h => `
+          <div class="history-entry">
+            <div class="history-meta">${h.updated_by || "—"} · ${h.updated_at || "—"}${h.status ? " · " + h.status : ""}</div>
+            <div class="history-text">${h.comment || "(sin comentario)"}</div>
+          </div>
+        `).join("");
+      } catch (e) {
+        body.innerHTML = "<p class='muted'>No se pudo cargar el historial.</p>";
+      }
+    }
+
+    // ---------------- Mapa de cobertura KML + regla de distancia ----------------
+    const map = L.map("coverage-map", { scrollWheelZoom: true }).setView([-9.19, -75.0152], 6);
+    L.tileLayer("https://{s}.basemaps.cartocdn.com/light_all/{z}/{x}/{y}{r}.png", {
+      attribution: '&copy; OpenStreetMap &copy; CARTO',
+      maxZoom: 19,
+    }).addTo(map);
+
+    fetch("/api/my/coverage")
+      .then(r => r.json())
+      .then(data => {
+        if (!data.geojson || !data.geojson.features || !data.geojson.features.length) {
+          document.getElementById("map-empty-state").style.display = "block";
+          return;
+        }
+        const layer = L.geoJSON(data.geojson, {
+          style: { color: "#4f46e5", weight: 1.5, fillColor: "#7c3aed", fillOpacity: 0.12, dashArray: "3" },
+          onEachFeature: (feature, lyr) => {
+            if (feature.properties && feature.properties.name) {
+              lyr.bindPopup(feature.properties.name);
+            }
+          },
+        }).addTo(map);
+        map.fitBounds(layer.getBounds(), { padding: [20, 20] });
+      })
+      .catch(() => { document.getElementById("map-empty-state").style.display = "block"; });
+
+    let manualMarker = null;
+    document.getElementById("btn-place-marker").addEventListener("click", () => {
+      const lat = parseFloat(document.getElementById("manual-lat").value);
+      const lng = parseFloat(document.getElementById("manual-lng").value);
+      if (Number.isNaN(lat) || Number.isNaN(lng)) return;
+      if (manualMarker) map.removeLayer(manualMarker);
+      manualMarker = L.marker([lat, lng]).addTo(map).bindPopup(`${lat}, ${lng}`).openPopup();
+      map.setView([lat, lng], 15);
+    });
+
+    let isMeasuring = false;
+    let measurePoints = [];
+    let measureMarkers = [];
+    let measureLine = null;
+    const rulerOutput = document.getElementById("ruler-output");
+    const btnToggleRuler = document.getElementById("btn-toggle-ruler");
+
+    function clearMeasurements() {
+      measurePoints = [];
+      measureMarkers.forEach(m => map.removeLayer(m));
+      measureMarkers = [];
+      if (measureLine) { map.removeLayer(measureLine); measureLine = null; }
+      rulerOutput.textContent = "";
+    }
+
+    btnToggleRuler.addEventListener("click", () => {
+      isMeasuring = !isMeasuring;
+      btnToggleRuler.classList.toggle("btn-tool-active", isMeasuring);
+      map.getContainer().style.cursor = isMeasuring ? "crosshair" : "";
+      if (!isMeasuring) clearMeasurements();
+    });
+    document.getElementById("btn-clear-ruler").addEventListener("click", clearMeasurements);
+
+    map.on("click", (e) => {
+      if (!isMeasuring) return;
+      measurePoints.push(e.latlng);
+      measureMarkers.push(L.circleMarker(e.latlng, { radius: 4, color: "#4f46e5", fillColor: "#4f46e5", fillOpacity: 1 }).addTo(map));
+      if (measureLine) map.removeLayer(measureLine);
+      measureLine = L.polyline(measurePoints, { color: "#4f46e5", weight: 2, dashArray: "6" }).addTo(map);
+      let total = 0;
+      for (let i = 1; i < measurePoints.length; i++) total += measurePoints[i - 1].distanceTo(measurePoints[i]);
+      rulerOutput.textContent = total < 1000 ? `${total.toFixed(1)} m` : `${(total / 1000).toFixed(2)} km`;
+    });
   </script>
 </body>
 </html>

@@ -153,6 +153,23 @@ def create_app():
         db.update_client_comment(account, comment, status, session.get("username"))
         return jsonify({"ok": True})
 
+    @app.route("/api/my/clients/<account>/history")
+    @require_login
+    def client_history(account):
+        branch = session["branch_code"]
+        client = db.get_client_by_account(account)
+        if not client:
+            return jsonify({"error": "not_found"}), 404
+        if client["branch"] != branch:
+            return jsonify({"error": "forbidden"}), 403
+        return jsonify({"history": db.get_comment_history(account)})
+
+    @app.route("/api/my/coverage")
+    @require_login
+    def my_coverage():
+        geojson = db.get_branch_coverage(session["branch_code"])
+        return jsonify({"geojson": geojson})
+
     # ---------------- Machine-to-machine (API key auth) ----------------
 
     @app.route("/api/sync/push", methods=["POST"])
@@ -169,6 +186,17 @@ def create_app():
         since = request.args.get("since")
         comments = db.get_comments_since(since)
         return jsonify({"comments": comments})
+
+    @app.route("/api/sync/push_coverage", methods=["POST"])
+    @require_api_key
+    def sync_push_coverage():
+        data = request.get_json(silent=True) or {}
+        branch_code = (data.get("branch_code") or "").strip().upper()
+        geojson_obj = data.get("geojson")
+        if not branch_code or not isinstance(geojson_obj, dict):
+            return jsonify({"error": "branch_code y geojson (objeto) son requeridos"}), 400
+        db.upsert_branch_coverage(branch_code, geojson_obj)
+        return jsonify({"ok": True, "branch_code": branch_code, "features": len(geojson_obj.get("features", []))})
 
     @app.route("/api/sync/seed_user", methods=["POST"])
     @require_api_key
