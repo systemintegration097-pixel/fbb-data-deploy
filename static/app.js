@@ -647,7 +647,10 @@ function pollSyncStatus() {
                 clearInterval(syncInterval);
                 stopSyncTimer(false);
                 resetSyncButton();
-                alert(status.message);
+                // Este alert() puede aparecer encima de CUALQUIER página del dashboard (sigue
+                // corriendo en segundo plano aunque hayas navegado a otra sección) -- el prefijo
+                // evita que se confunda con un error de otra parte, como Despliegues Pendientes.
+                alert("Sincronización de Excel (GNOC/Tableau/NIMS/CNOC) falló:\n\n" + status.message);
             } else if (status.state === "idle") {
                 clearInterval(syncInterval);
                 resetSyncButton();

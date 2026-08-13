@@ -359,7 +359,15 @@ async def run_flow():
         # --- PASO 2: Segundo Login (auth.viettel.vn) ---
         print_log("Esperando botón de redirección de contraseña...")
         password_button_selector = "button.password-button"
-        await page.wait_for_selector(password_button_selector, timeout=20000)
+        try:
+            # 20s se quedaba corto: esta página también renderiza contenido de
+            # Passkey (botones "Login with Passkey" / guía de registro) antes o
+            # junto con el botón de password, y bajo lentitud de red ese render
+            # extra podía empujar el botón más allá de los 20s originales.
+            await page.wait_for_selector(password_button_selector, timeout=35000)
+        except Exception:
+            await page.screenshot(path="./screenshot_password_button_timeout.png")
+            raise
         await page.locator(password_button_selector).click()
         
         print_log("Llenando credenciales en la segunda página de login...")
