@@ -6,7 +6,7 @@ from functools import wraps
 
 from dotenv import load_dotenv
 from flask import Flask, flash, jsonify, redirect, render_template, request, session, url_for
-from werkzeug.security import check_password_hash
+from werkzeug.security import check_password_hash, generate_password_hash
 
 import db
 
@@ -169,6 +169,21 @@ def create_app():
         since = request.args.get("since")
         comments = db.get_comments_since(since)
         return jsonify({"comments": comments})
+
+    @app.route("/api/sync/seed_user", methods=["POST"])
+    @require_api_key
+    def sync_seed_user():
+        """Crea o actualiza el login de una sucursal. Protegido con la misma
+        CLOUD_API_KEY que ya usa la sync local -- reemplaza a seed_users.py
+        (que asume acceso por Shell, no disponible en el plan Free de Render)."""
+        data = request.get_json(silent=True) or {}
+        branch_code = (data.get("branch_code") or "").strip().upper()
+        username = (data.get("username") or "").strip()
+        password = data.get("password") or ""
+        if not branch_code or not username or len(password) < 8:
+            return jsonify({"error": "branch_code, username y password (min. 8 caracteres) son requeridos"}), 400
+        db.upsert_branch_user(branch_code, username, generate_password_hash(password))
+        return jsonify({"ok": True, "branch_code": branch_code, "username": username})
 
     return app
 
