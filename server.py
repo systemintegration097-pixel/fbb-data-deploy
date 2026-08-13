@@ -14,6 +14,7 @@ import nims_topology
 import kpi_calc
 import deploy_pending
 import cloud_sync
+import sheets_push
 try:
     import an_portal_client
 except Exception:
@@ -2516,10 +2517,67 @@ def fbb_static_proxy(path):
 def static_proxy(path):
     return send_from_directory(app.static_folder, path)
 
+AUTO_SYNC_LOOP_INTERVAL_SECONDS = 15 * 60  # pausa entre el fin de un ciclo y el inicio del siguiente
+AUTO_DEPLOY_LOOP_INTERVAL_SECONDS = 15 * 60
+
+def _auto_excel_sync_loop():
+    """Reemplaza a la Tarea Programada de Windows (FBB_GNOC_FullSync, ahora desactivada):
+    mientras este servidor esté corriendo, sincroniza Excel y sube a Google Sheets en bucle
+    continuo, sin depender de que el Programador de Tareas esté bien configurado. Reusa
+    exactamente la misma run_background_sync() que dispara el botón "Sincronizar Excel" -si
+    el usuario ya está sincronizando a mano cuando le toca a este ciclo, se salta esa vuelta
+    en vez de pelear por el mismo sync_lock."""
+    while True:
+        cycle_start = time.time()
+        try:
+            with sync_lock:
+                ya_corriendo = sync_status["state"] in ("downloading", "processing")
+            if ya_corriendo:
+                print("[AutoSync] Ya hay una sincronización en curso (probablemente manual) -- se omite este ciclo.", flush=True)
+            else:
+                print("[AutoSync] Iniciando sincronización automática de Excel...", flush=True)
+                run_background_sync()
+                with sync_lock:
+                    estado_final = dict(sync_status)
+                if estado_final["state"] == "success":
+                    print(f"[AutoSync] Sync OK: {estado_final['message']} -- subiendo a Google Sheets...", flush=True)
+                    try:
+                        filas = sheets_push.push_pending_valid_to_sheet()
+                        print(f"[AutoSync] Push a Google Sheets OK ({filas} filas).", flush=True)
+                    except Exception as e:
+                        print(f"[AutoSync] Push a Google Sheets falló: {e}", flush=True)
+                else:
+                    print(f"[AutoSync] Sync de Excel terminó en estado '{estado_final['state']}' -- se omite el push a Sheets.", flush=True)
+        except Exception as e:
+            print(f"[AutoSync] Error inesperado en el ciclo automático: {e}", flush=True)
+        time.sleep(max(0, AUTO_SYNC_LOOP_INTERVAL_SECONDS - (time.time() - cycle_start)))
+
+def _auto_deploy_pending_loop():
+    """Igual que _auto_excel_sync_loop pero para "Actualizar Despliegues" (deploy ant):
+    trigger_run() ya trae su propio guard contra corridas simultáneas (devuelve False si
+    ya hay una activa, manual o automática), así que alcanza con revisar ese resultado."""
+    while True:
+        cycle_start = time.time()
+        try:
+            iniciado = deploy_pending.trigger_run()
+            if not iniciado:
+                print("[AutoDeploy] Ya hay una actualización de despliegues en curso -- se omite este ciclo.", flush=True)
+            else:
+                print("[AutoDeploy] Iniciando actualización automática de despliegues...", flush=True)
+                while deploy_pending.get_run_status()["state"] == "running":
+                    time.sleep(5)
+                estado_final = deploy_pending.get_run_status()
+                print(f"[AutoDeploy] Terminó en estado '{estado_final['state']}': {estado_final['message']}", flush=True)
+        except Exception as e:
+            print(f"[AutoDeploy] Error inesperado en el ciclo automático: {e}", flush=True)
+        time.sleep(max(0, AUTO_DEPLOY_LOOP_INTERVAL_SECONDS - (time.time() - cycle_start)))
+
 if __name__ == "__main__":
     print("Iniciando servidor de la Plataforma de Avance GNOC en http://localhost:5001 ...")
     threading.Thread(target=_alarm_scan_loop, daemon=True).start()
     threading.Thread(target=_cloud_comments_pull_loop, daemon=True).start()
+    threading.Thread(target=_auto_excel_sync_loop, daemon=True).start()
+    threading.Thread(target=_auto_deploy_pending_loop, daemon=True).start()
     # Loop automático de Auditoría OLT — arranca siempre; si falta olts_input.xlsx
     # el loop espera 60 s y reintenta hasta que el archivo aparezca.
     threading.Thread(target=_olt_scan_loop, daemon=True).start()
