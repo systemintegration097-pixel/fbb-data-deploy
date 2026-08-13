@@ -50,6 +50,14 @@ async function initApp() {
     setInterval(fetchAlarmScanStatus, 60000);
     setInterval(_pollOltLoopStatus, 30000);
 
+    // Los bucles automáticos de server.py (_auto_excel_sync_loop / _auto_deploy_pending_loop)
+    // pueden arrancar un sync o una actualización de despliegues sin que el usuario toque
+    // ningún botón -sin esto, el cronómetro/estado solo aparecían si el usuario disparaba
+    // la acción él mismo o recargaba la página a mitad de una corrida. Se revisa cada 10s
+    // si hay algo corriendo que esta pestaña todavía no esté siguiendo.
+    setInterval(_watchAutoTriggeredSync, 10000);
+    setInterval(_watchAutoTriggeredDeploy, 10000);
+
     // El filtro de mes(es) de tipificación se llena a partir de las WOs cargadas,
     // así que se espera a que terminen de llegar antes de poblarlo y disparar el reporte
     await fetchWorkOrders();
@@ -681,6 +689,23 @@ function resetSyncButton() {
     btnSync.disabled = false;
     btnSync.classList.remove("loading");
     btnSync.querySelector("span").textContent = "Sincronizar Excel";
+}
+
+async function _watchAutoTriggeredSync() {
+    if (syncInterval) return; // ya se está siguiendo (manual o ya detectado antes)
+    try {
+        const r = await fetch("/api/sync/status");
+        const status = await r.json();
+        if (status.state === "downloading" || status.state === "processing") {
+            // Mismo setup que triggerSync(), pero disparado por el ciclo automático de
+            // server.py en vez de un clic -así el botón/cronómetro se ven igual de cualquier forma.
+            btnSync.disabled = true;
+            btnSync.classList.add("loading");
+            btnSync.querySelector("span").textContent = status.message || "Sincronizando...";
+            startSyncTimer();
+            pollSyncStatus();
+        }
+    } catch (e) { /* silencioso, se reintenta en el próximo tick */ }
 }
 
 function pollSyncStatus() {
@@ -3292,6 +3317,17 @@ function _startDeployPendingPolling() {
     if (_dpRunPollInterval) clearInterval(_dpRunPollInterval);
     _pollDeployPendingStatusOnce();
     _dpRunPollInterval = setInterval(_pollDeployPendingStatusOnce, 5000);
+}
+
+async function _watchAutoTriggeredDeploy() {
+    if (_dpRunPollInterval) return; // ya se está siguiendo (manual o ya detectado antes)
+    try {
+        const r = await fetch("/api/deploy_pending/run_status");
+        const status = await r.json();
+        if (status.state === "running") {
+            _startDeployPendingPolling();
+        }
+    } catch (e) { /* silencioso, se reintenta en el próximo tick */ }
 }
 
 

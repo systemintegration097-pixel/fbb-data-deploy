@@ -55,6 +55,9 @@
       </div>
       <button type="button" class="btn-tool btn-tool-ghost" id="btn-clear-filters">Limpiar filtros</button>
       <span id="filter-count" class="muted"></span>
+      <div class="table-search">
+        <input type="text" id="client-search" placeholder="Buscar en la tabla..." class="coord-input search-input">
+      </div>
     </div>
     <table>
       <thead>
@@ -179,6 +182,12 @@
       });
       const salesCodeCheckboxes = [...checkboxesContainer.querySelectorAll("input[type=checkbox]")];
 
+      const searchInput = document.getElementById("client-search");
+      // Solo las primeras 7 columnas son texto estático (Account..Días Pendiente) -las
+      // últimas 3 son el input de Estado, el textarea de Comentario y los botones, que no
+      // deben entrar en la búsqueda. Se precalcula una vez por fila, no en cada tecla.
+      const rowSearchText = new Map(rows.map(row => [row, [...row.cells].slice(0, 7).map(td => td.textContent).join(" ").toLowerCase()]));
+
       const toggle = document.getElementById("salescode-filter-toggle");
       const panel = document.getElementById("salescode-filter-panel");
       toggle.addEventListener("click", () => { panel.hidden = !panel.hidden; });
@@ -189,11 +198,13 @@
       function applyFilters() {
         const partner = partnerSelect.value;
         const selectedCodes = salesCodeCheckboxes.filter(cb => cb.checked).map(cb => cb.value);
+        const searchTerm = searchInput.value.trim().toLowerCase();
         let visible = 0;
         rows.forEach(row => {
           const matchesPartner = !partner || row.dataset.partner === partner;
           const matchesCode = !selectedCodes.length || selectedCodes.includes(row.dataset.shopCode);
-          const show = matchesPartner && matchesCode;
+          const matchesSearch = !searchTerm || rowSearchText.get(row).includes(searchTerm);
+          const show = matchesPartner && matchesCode && matchesSearch;
           row.style.display = show ? "" : "none";
           if (show) visible++;
         });
@@ -214,11 +225,13 @@
       document.getElementById("btn-clear-filters").addEventListener("click", () => {
         partnerSelect.value = "";
         salesCodeCheckboxes.forEach(cb => cb.checked = false);
+        searchInput.value = "";
         applyFilters();
       });
 
       partnerSelect.addEventListener("change", applyFilters);
       salesCodeCheckboxes.forEach(cb => cb.addEventListener("change", applyFilters));
+      searchInput.addEventListener("input", applyFilters);
 
       applyFilters();
     })();
