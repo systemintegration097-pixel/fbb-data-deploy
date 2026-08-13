@@ -1109,12 +1109,27 @@ def limpiar_descargas_antiguas(carpeta_base: Path, dias: int = 7):
             try:
                 # El nombre de la carpeta es la fecha (ej. 2026-07-24)
                 fecha_carpeta = datetime.strptime(subcarpeta.name, "%Y-%m-%d")
-                if fecha_carpeta < limite:
-                    shutil.rmtree(subcarpeta)
-                    logger.info(f"Carpeta antigua eliminada por tener más de {dias} días: {subcarpeta.name}")
             except ValueError:
                 # No es una carpeta con formato de fecha esperado
-                pass
+                continue
+            if fecha_carpeta >= limite:
+                continue
+            # Esta carpeta vive dentro de OneDrive, que a veces retiene un lock
+            # breve sobre archivos recién sincronizados -> un solo intento de
+            # rmtree puede fallar con PermissionError (WinError 5) sin que la
+            # carpeta esté realmente en uso. Un reintento tras una pausa corta
+            # resuelve la mayoría de esos casos; si sigue fallando, se loguea
+            # y se sigue con las demás carpetas en vez de tumbar todo el script.
+            for intento in (1, 2):
+                try:
+                    shutil.rmtree(subcarpeta)
+                    logger.info(f"Carpeta antigua eliminada por tener más de {dias} días: {subcarpeta.name}")
+                    break
+                except OSError as e:
+                    if intento == 2:
+                        logger.warning(f"No se pudo eliminar la carpeta antigua {subcarpeta.name} (se reintentará en la próxima corrida): {e}")
+                    else:
+                        time.sleep(2)
 
 
 def _limpiar_carpeta_descargas(carpeta: Path):
