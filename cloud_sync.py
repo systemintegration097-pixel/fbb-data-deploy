@@ -10,6 +10,13 @@ import os
 import threading
 
 import requests
+from dotenv import load_dotenv
+
+# server.py (el proceso donde vive este módulo) nunca llama a load_dotenv() por su
+# cuenta -- los demás scripts del proyecto son subprocesos separados que cargan su
+# propio .env, pero el proceso principal nunca lo hacía. Sin esto, CLOUD_SYNC_URL/
+# CLOUD_API_KEY quedarían siempre vacíos aunque estén en el .env.
+load_dotenv()
 
 CLOUD_SYNC_URL = os.environ.get("CLOUD_SYNC_URL", "").rstrip("/")
 CLOUD_API_KEY = os.environ.get("CLOUD_API_KEY", "")
