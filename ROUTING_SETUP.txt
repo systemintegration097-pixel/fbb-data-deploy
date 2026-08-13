@@ -1,0 +1,59 @@
+====================================================================
+ RUTEO NECESARIO PARA ACCEDER A EMS Y TMS (una sola vez por PC)
+====================================================================
+
+Por que hace falta esto:
+La VPN de Bitel no llega a los servidores de EMS y TMS/BRAS -- solo
+se puede llegar a esas dos IPs conectado por CABLE ETHERNET a la red
+interna. Este paso le dice a Windows: "para estas dos IPs puntuales,
+usa el cable Ethernet en vez de la VPN", sin afectar el resto del
+trafico (que sigue yendo por VPN normalmente).
+
+IPs que necesitan esta regla:
+  - EMS (Auditoria OLT):        10.121.167.65
+  - TMS / BRAS check:           10.121.62.102
+
+PASOS:
+
+1. Conecta el cable de red (Ethernet) a la PC.
+
+2. Abre "Simbolo del sistema" (cmd) o PowerShell COMO ADMINISTRADOR
+   (clic derecho -> "Ejecutar como administrador"). El comando "route"
+   necesita permisos de administrador o falla en silencio.
+
+3. Averigua la puerta de enlace (gateway) que te asigna el cable
+   Ethernet -- va a ser DISTINTA en cada PC/oficina, no uses la misma
+   que la de otra persona. Corre:
+
+       ipconfig
+
+   Busca la seccion "Adaptador de Ethernet Ethernet" y anota el valor
+   de "Puerta de enlace predeterminada" (algo como 10.121.xxx.xxx).
+   Si esa seccion no muestra puerta de enlace, pregunta a tu equipo de
+   redes/IT cual es el gateway correcto para salir por el cable en esa
+   ubicacion.
+
+4. Con ese valor, corre estos DOS comandos (reemplaza GATEWAY_ETH por
+   el valor real que anotaste en el paso 3):
+
+       route -p add 10.121.167.65 mask 255.255.255.255 GATEWAY_ETH metric 1
+       route -p add 10.121.62.102 mask 255.255.255.255 GATEWAY_ETH metric 1
+
+   El flag "-p" las hace persistentes (sobreviven a un reinicio de la
+   PC), asi que este paso se hace UNA sola vez.
+
+5. Verifica que quedaron bien:
+
+       route print -4 | findstr "10.121.167.65 10.121.62.102"
+
+   Deberias ver ambas IPs apuntando al gateway de Ethernet, no al de
+   la VPN.
+
+Notas:
+- El resto de sistemas (GNOC, Tableau, NIMS, CNOC) SI funcionan por
+  VPN normal, no necesitan ningun ruteo especial -- solo EMS y TMS.
+- Si mas adelante el cable Ethernet cambia de red/gateway (otra
+  oficina, otro switch), hay que borrar las rutas viejas y repetir el
+  paso 4 con el nuevo gateway:
+      route delete 10.121.167.65
+      route delete 10.121.62.102
