@@ -20,7 +20,8 @@ load_dotenv()
 
 CLOUD_SYNC_URL = os.environ.get("CLOUD_SYNC_URL", "").rstrip("/")
 CLOUD_API_KEY = os.environ.get("CLOUD_API_KEY", "")
-REQUEST_TIMEOUT_SEC = 15
+REQUEST_TIMEOUT_SEC = 60  # generoso: cientos de upserts secuenciales en Postgres +
+# posible cold-start del cómputo serverless de Neon tras estar inactivo
 
 _comments_lock = threading.Lock()
 _comments_cache = {}  # account -> {branch, comment, status, comment_updated_by, comment_updated_at}
