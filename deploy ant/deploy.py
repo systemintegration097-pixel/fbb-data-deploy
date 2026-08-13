@@ -72,7 +72,7 @@ from selenium.webdriver.support import expected_conditions as EC
 from selenium.webdriver.firefox.options import Options
 from webdriver_manager.firefox import GeckoDriverManager
 from selenium.webdriver.firefox.service import Service
-from selenium.common.exceptions import TimeoutException, NoSuchElementException
+from selenium.common.exceptions import TimeoutException, NoSuchElementException, StaleElementReferenceException
 
 # ---------------------------------------------------------------------------
 # CONFIGURACIÓN GENERAL
@@ -293,6 +293,15 @@ def click_robusto(driver, elemento, nombre_paso="botón"):
     try:
         elemento.click()
         logger.info(f"[{nombre_paso}] Clic normal de Selenium realizado.")
+    except StaleElementReferenceException:
+        # El elemento ya no existe en el DOM (típico durante el glass pane de carga de
+        # Tableau, que puede tardar hasta 60s y sigue re-renderizando el toolbar/menú
+        # mientras tanto). Pasarle esta misma referencia stale a execute_script() para
+        # el fallback de abajo NO funciona -Firefox/Marionette revienta con un error
+        # interno de serialización (cloneObject/deserializeJSON) en vez de un mensaje
+        # claro-, así que se relanza tal cual para que el caller vuelva a buscar el
+        # elemento desde cero en vez de reintentar sobre una referencia muerta.
+        raise
     except Exception as e:
         logger.info(f"[{nombre_paso}] Clic normal falló ({e}), probando clic por JavaScript...")
         # En Tableau, si el JS click da en el span, el menú no abre. Subimos al padre si es necesario.
@@ -589,19 +598,38 @@ def descargar_crosstab(driver):
         (By.XPATH, "//div[.//label[contains(text(),'Crosstab')]]")
     ]
     
-    opcion_crosstab = None
-    for by, sel in SELECTORES_CROSSTAB:
-        try:
-            opcion_crosstab = buscar_en_frames(driver, by, sel, timeout=5, nombre_paso="Menú-Crosstab", clickable=True)
-            if opcion_crosstab:
-                break
-        except TimeoutException:
-            continue
-            
-    if not opcion_crosstab:
-        raise TimeoutException("No se encontró la opción Crosstab en el menú de descarga.")
+    # El glass pane de carga de Tableau puede tardar hasta 60s en desaparecer y sigue
+    # re-renderizando el menú mientras tanto: el elemento se encuentra bien pero puede
+    # quedar 'stale' para cuando se le hace clic unos segundos después (visto en
+    # producción, 3/3 intentos el mismo día). Se reintenta la búsqueda+clic COMPLETA
+    # -no solo el clic- ante ese caso específico, en vez de fallar de una.
+    clic_realizado = False
+    ultimo_error_stale = None
+    for intento_stale in range(1, 4):
+        opcion_crosstab = None
+        for by, sel in SELECTORES_CROSSTAB:
+            try:
+                opcion_crosstab = buscar_en_frames(driver, by, sel, timeout=5, nombre_paso="Menú-Crosstab", clickable=True)
+                if opcion_crosstab:
+                    break
+            except TimeoutException:
+                continue
 
-    click_robusto(driver, opcion_crosstab, nombre_paso="Menú-Crosstab")
+        if not opcion_crosstab:
+            raise TimeoutException("No se encontró la opción Crosstab en el menú de descarga.")
+
+        try:
+            click_robusto(driver, opcion_crosstab, nombre_paso="Menú-Crosstab")
+            clic_realizado = True
+            break
+        except StaleElementReferenceException as e:
+            ultimo_error_stale = e
+            logger.warning(f"[Menú-Crosstab] Elemento quedó obsoleto justo antes/durante el clic (intento {intento_stale}/3), reintentando búsqueda...")
+            time.sleep(1)
+
+    if not clic_realizado:
+        raise ultimo_error_stale
+
     logger.info("Opción 'Crosstab' seleccionada.")
 
     # Clic en "Excel" dentro del cuadro de diálogo intermedio
@@ -630,21 +658,35 @@ def descargar_crosstab(driver):
         (By.XPATH, "//button[contains(., 'Descargar')]"),
     ]
 
-    boton_download = None
-    fin_busqueda = time.time() + 45
-    while time.time() < fin_busqueda and not boton_download:
-        for by, sel in SELECTORES_FINAL:
-            try:
-                boton_download = buscar_en_frames(driver, by, sel, timeout=5, nombre_paso="Download-Final", clickable=True)
-                if boton_download:
-                    break
-            except TimeoutException:
-                continue
+    clic_download_realizado = False
+    ultimo_error_stale = None
+    for intento_stale in range(1, 4):
+        boton_download = None
+        fin_busqueda = time.time() + 45
+        while time.time() < fin_busqueda and not boton_download:
+            for by, sel in SELECTORES_FINAL:
+                try:
+                    boton_download = buscar_en_frames(driver, by, sel, timeout=5, nombre_paso="Download-Final", clickable=True)
+                    if boton_download:
+                        break
+                except TimeoutException:
+                    continue
 
-    if not boton_download:
-        raise TimeoutException("No se encontró el botón final de descarga (el del modal de Crosstab).")
-        
-    click_robusto(driver, boton_download, nombre_paso="Download-Final")
+        if not boton_download:
+            raise TimeoutException("No se encontró el botón final de descarga (el del modal de Crosstab).")
+
+        try:
+            click_robusto(driver, boton_download, nombre_paso="Download-Final")
+            clic_download_realizado = True
+            break
+        except StaleElementReferenceException as e:
+            ultimo_error_stale = e
+            logger.warning(f"[Download-Final] Elemento quedó obsoleto justo antes/durante el clic (intento {intento_stale}/3), reintentando búsqueda...")
+            time.sleep(1)
+
+    if not clic_download_realizado:
+        raise ultimo_error_stale
+
     logger.info("Clic en 'Download' final realizado, esperando que la descarga termine...")
 
     archivos_descargados = esperar_descarga_completa(DOWNLOAD_DIR, timeout=300)
