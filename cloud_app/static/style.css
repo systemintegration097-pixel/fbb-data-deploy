@@ -237,10 +237,9 @@ tr:hover td { background: #fafbff; }
 .filters-bar { display: flex; gap: 8px; align-items: center; flex-wrap: wrap; margin-bottom: 1rem; }
 .filter-select { padding-right: 1.75rem; }
 
-.table-search { margin-left: auto; }
 .search-input { width: 220px; }
 @media (max-width: 640px) {
-  .table-search { margin-left: 0; width: 100%; }
+  .table-search { width: 100%; }
   .search-input { width: 100%; }
 }
 
