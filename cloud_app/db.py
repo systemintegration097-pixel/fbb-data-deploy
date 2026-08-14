@@ -1,3 +1,4 @@
+import json
 import os
 
 import psycopg2
@@ -153,6 +154,19 @@ def get_meta(key):
             return row["value"] if row else None
     finally:
         conn.close()
+
+
+# ---------------- daily_report (snapshot autocontenido, ver daily_report.py local) ----------------
+
+def set_daily_report(payload):
+    """payload ya trae su propio 'generated_at' (generado localmente) -- se guarda
+    tal cual como un solo blob JSON en sync_meta, igual que last_deploy_run."""
+    set_meta("daily_report_json", json.dumps(payload))
+
+
+def get_daily_report():
+    raw = get_meta("daily_report_json")
+    return json.loads(raw) if raw else None
 
 
 # ---------------- pending_clients ----------------

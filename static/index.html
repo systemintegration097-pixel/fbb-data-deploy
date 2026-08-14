@@ -56,6 +56,10 @@
                     <i class="fa-solid fa-chart-line"></i>
                     <span>Reporte KPI</span>
                 </a>
+                <a href="#" class="nav-item" data-page="daily-report" id="nav-daily-report">
+                    <i class="fa-solid fa-calendar-day"></i>
+                    <span>Reporte Diario</span>
+                </a>
                 <a href="#" class="nav-item" data-page="credentials" id="nav-credentials">
                     <i class="fa-solid fa-key"></i>
                     <span>Credenciales</span>
@@ -774,6 +778,68 @@
                     </section>
                 </div>
             </div><!-- /page-kpi -->
+
+            <!-- ==================== PÁGINA: REPORTE DIARIO ==================== -->
+            <div id="page-daily-report" class="page-section">
+                <div id="dr-loading" style="text-align:center;padding:30px;color:#9AA0A6;"><i class="fa-solid fa-spinner fa-spin"></i> Calculando reporte diario...</div>
+
+                <div id="dr-content" style="display:none;">
+                    <h3 style="font-size:1.1rem;font-weight:700;margin:0 0 14px;"><i class="fa-solid fa-screwdriver-wrench" style="color:#4285F4;margin-right:8px;"></i>Instalaciones</h3>
+                    <div class="olt-header card" style="margin-bottom:20px;padding:20px 24px;">
+                        <div style="display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:12px;">
+                            <div class="kpi-period-toggle">
+                                <button class="kpi-period-btn active" data-dr-period="monthly">Mensual</button>
+                                <button class="kpi-period-btn" data-dr-period="weekly">Semanal</button>
+                            </div>
+                            <select id="dr-period-select" class="filter-select-sm" style="min-width:160px;"></select>
+                        </div>
+                    </div>
+
+                    <section class="charts-section mt-2" style="grid-template-columns: repeat(auto-fit, minmax(480px, 1fr)); margin-bottom:28px;">
+                        <div class="table-section card">
+                            <div class="table-header" style="border-bottom: 1px solid rgba(255,255,255,0.05); padding-bottom: 10px; margin-bottom: 10px;">
+                                <h2 id="dr-installs-table-title" style="font-size:1.1rem;font-weight:600;"><i class="fa-solid fa-building-user" style="color:#4285F4;margin-right:8px;"></i></h2>
+                            </div>
+                            <div class="table-responsive">
+                                <table class="data-table small-table" style="font-size:12px;">
+                                    <thead><tr><th>Branch</th><th class="text-center">Instalaciones</th></tr></thead>
+                                    <tbody id="dr-installs-table-body"></tbody>
+                                </table>
+                            </div>
+                        </div>
+                        <div class="chart-container card">
+                            <h3 id="dr-installs-chart-title">Instalaciones por Día</h3>
+                            <div class="chart-wrapper"><canvas id="drInstallsChart"></canvas></div>
+                        </div>
+                    </section>
+
+                    <h3 style="font-size:1.1rem;font-weight:700;margin:0 0 14px;"><i class="fa-solid fa-triangle-exclamation" style="color:#D93025;margin-right:8px;"></i>Averías Pendientes por Branch <span id="dr-pending-since" style="font-weight:400;font-size:0.8rem;color:#9AA0A6;"></span></h3>
+                    <section class="table-section card mt-2" style="margin-bottom:28px;">
+                        <div class="table-responsive">
+                            <table class="data-table small-table" style="font-size:12px;">
+                                <thead><tr><th>Branch</th><th class="text-center">Pendientes</th></tr></thead>
+                                <tbody id="dr-pending-table-body"></tbody>
+                            </table>
+                        </div>
+                    </section>
+
+                    <h3 style="font-size:1.1rem;font-weight:700;margin:0 0 14px;"><i class="fa-solid fa-check-double" style="color:#0F9D58;margin-right:8px;"></i>Cierres de Averías <span style="font-weight:400;font-size:0.8rem;color:#9AA0A6;">(de acuerdo a GNOC)</span></h3>
+                    <section class="charts-section" style="grid-template-columns: repeat(auto-fit, minmax(480px, 1fr)); margin-bottom:20px;">
+                        <div class="chart-container card">
+                            <h3>Por Mes</h3>
+                            <div class="chart-wrapper"><canvas id="drClosuresMonthChart"></canvas></div>
+                        </div>
+                        <div class="chart-container card">
+                            <h3>Por Semana</h3>
+                            <div class="chart-wrapper"><canvas id="drClosuresWeekChart"></canvas></div>
+                        </div>
+                    </section>
+                    <div class="chart-container card" style="margin-bottom:20px;">
+                        <h3>Por Día</h3>
+                        <div class="chart-wrapper"><canvas id="drClosuresDayChart"></canvas></div>
+                    </div>
+                </div>
+            </div><!-- /page-daily-report -->
 
             <!-- ==================== PÁGINA: DESPLIEGUES PENDIENTES ==================== -->
             <div id="page-deploy-pending" class="page-section">
@@ -2604,7 +2670,7 @@
         </div>
     </div>
 
-    <script src="app.js?v=29"></script>
+    <script src="app.js?v=30"></script>
     <!-- Leaflet.js Map (módulo FBB DATA) -->
     <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js" integrity="sha256-20nQCchB9co0qIjJZRGuk2/Z9VM+kNiyxNV1lvTlZBo=" crossorigin=""></script>
     <script src="fbb-app.js?v=3"></script>

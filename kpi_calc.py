@@ -509,6 +509,13 @@ def compute_weekly_trend():
     return trend
 
 
+def get_enriched_wos():
+    """Acceso público al DataFrame enriquecido de WOs (branch, kpi_closing, month_key,
+    week_key, create_time, closed_time ya limpios) para otros módulos que necesiten las
+    mismas columnas derivadas sin duplicar el cálculo -ver daily_report.py."""
+    return _load_enriched_wos()
+
+
 def get_reference_status():
     conn = _get_conn()
     cur = conn.cursor()

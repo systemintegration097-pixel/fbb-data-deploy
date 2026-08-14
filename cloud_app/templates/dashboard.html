@@ -6,6 +6,7 @@
   <title>Despliegues Pendientes — {{ branch }}</title>
   <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css"
         integrity="sha256-p4NxAoJBhIIN+hmNHrzRCf9tD/miZyoHS5obTRR9BMY=" crossorigin="">
+  {% if is_admin %}<script src="https://cdn.jsdelivr.net/npm/chart.js"></script>{% endif %}
   <link rel="stylesheet" href="{{ url_for('static', filename='style.css') }}">
 </head>
 <body>
@@ -48,6 +49,60 @@
         <span class="stat-value stat-purple">{{ stats.cerrar_wo }}</span>
       </div>
     </section>
+
+    {% if is_admin %}
+    <section class="report-card" id="daily-report-card">
+      <div class="report-card-header">
+        <h2>📅 Reporte Diario</h2>
+        <button type="button" class="btn-tool" id="btn-toggle-daily-report">Mostrar</button>
+      </div>
+      <div class="report-body" id="daily-report-body" style="display:none;">
+        <p class="muted" id="dr-updated-line" style="margin:0 0 1rem;"></p>
+        <div id="dr-loading" class="muted">Cargando...</div>
+        <div id="dr-content" style="display:none;">
+          <div style="display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:10px;margin-bottom:1rem;">
+            <h3 class="report-section-title" style="margin:0;">Instalaciones por Branch</h3>
+            <div style="display:flex;gap:10px;align-items:center;flex-wrap:wrap;">
+              <div class="period-toggle">
+                <button type="button" class="active" data-dr-period="monthly">Mensual</button>
+                <button type="button" data-dr-period="weekly">Semanal</button>
+              </div>
+              <select id="dr-period-select" class="btn-tool filter-select"></select>
+            </div>
+          </div>
+          <div class="report-grid" style="margin-bottom:1.75rem;">
+            <table>
+              <thead><tr><th>Branch</th><th>Instalaciones</th></tr></thead>
+              <tbody id="dr-installs-table-body"></tbody>
+            </table>
+            <div class="chart-box"><canvas id="drInstallsChart"></canvas></div>
+          </div>
+
+          <h3 class="report-section-title">Averías Pendientes por Branch <span id="dr-pending-since" class="muted"></span></h3>
+          <table style="margin-bottom:1.75rem;">
+            <thead><tr><th>Branch</th><th>Pendientes</th></tr></thead>
+            <tbody id="dr-pending-table-body"></tbody>
+          </table>
+
+          <h3 class="report-section-title">Cierres de Averías <span class="muted">(de acuerdo a GNOC)</span></h3>
+          <div class="report-grid report-grid-3">
+            <div>
+              <p class="muted" style="margin:0 0 6px;font-size:0.8rem;">Por Mes</p>
+              <div class="chart-box"><canvas id="drClosuresMonthChart"></canvas></div>
+            </div>
+            <div>
+              <p class="muted" style="margin:0 0 6px;font-size:0.8rem;">Por Semana</p>
+              <div class="chart-box"><canvas id="drClosuresWeekChart"></canvas></div>
+            </div>
+            <div>
+              <p class="muted" style="margin:0 0 6px;font-size:0.8rem;">Por Día</p>
+              <div class="chart-box"><canvas id="drClosuresDayChart"></canvas></div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </section>
+    {% endif %}
 
     <section class="map-card">
       <div class="map-card-header">
@@ -203,6 +258,139 @@
         body.innerHTML = "<p class='muted'>No se pudo cargar el historial.</p>";
       }
     }
+
+    {% if is_admin %}
+    // ---------------- Reporte Diario (solo admin) ----------------
+    let _drLoaded = false;
+    let _drData = null;
+    const _drState = { periodType: "monthly" };
+    let _drInstallsChart = null, _drClosuresMonthChart = null, _drClosuresWeekChart = null, _drClosuresDayChart = null;
+
+    document.getElementById("btn-toggle-daily-report").addEventListener("click", async () => {
+      const body = document.getElementById("daily-report-body");
+      const btn = document.getElementById("btn-toggle-daily-report");
+      const show = body.style.display === "none";
+      body.style.display = show ? "block" : "none";
+      btn.textContent = show ? "Ocultar" : "Mostrar";
+      if (show && !_drLoaded) await _loadDailyReport();
+    });
+
+    async function _loadDailyReport() {
+      const loadingEl = document.getElementById("dr-loading");
+      const contentEl = document.getElementById("dr-content");
+      try {
+        const r = await fetch("/api/admin/daily_report");
+        const data = await r.json();
+        if (!r.ok) throw new Error(data.error || "Error al cargar el reporte diario.");
+        if (!data.report) {
+          loadingEl.textContent = "Todavía no se ha sincronizado el Reporte Diario desde el dashboard local.";
+          return;
+        }
+        _drData = data.report;
+        document.getElementById("dr-updated-line").textContent = data.updated_at ? `Última sincronización desde el dashboard local: ${data.updated_at}` : "";
+        _renderDrPending(_drData.overview.pending);
+        _renderDrClosuresCharts(_drData.overview.closures_by_month, _drData.overview.closures_by_week, _drData.overview.closures_by_day);
+        _populateDrPeriodSelect();
+        _renderDrInstalls();
+        _drLoaded = true;
+        loadingEl.style.display = "none";
+        contentEl.style.display = "block";
+      } catch (e) {
+        loadingEl.textContent = "Error: " + e.message;
+      }
+    }
+
+    function _populateDrPeriodSelect() {
+      const select = document.getElementById("dr-period-select");
+      const periods = _drData.overview.installs_periods;
+      const list = _drState.periodType === "monthly" ? periods.months : periods.weeks;
+      const valueKey = _drState.periodType === "monthly" ? "month_key" : "week_key";
+      select.innerHTML = list.map(p => `<option value="${p[valueKey]}">${_escHtml(p.label)}</option>`).join("");
+      if (list.length) select.value = list[list.length - 1][valueKey];
+    }
+
+    function _renderDrInstalls() {
+      const select = document.getElementById("dr-period-select");
+      const value = select.value;
+      if (!value) return;
+      const isWeekly = _drState.periodType === "weekly";
+      let branchTotals, total;
+      if (isWeekly) {
+        const wk = _drData.installs_by_week[value];
+        branchTotals = wk.branch_table.map(b => ({ branch: b.branch, qty: b.qty }));
+        total = wk.total;
+      } else {
+        const days = _drData.installs_by_month[value] || [];
+        const branchList = _drData.overview.pending.branch_table.map(b => b.branch);
+        branchTotals = branchList.map(br => ({ branch: br, qty: days.reduce((s, d) => s + (d[br] || 0), 0) }));
+        total = days.reduce((s, d) => s + d.total, 0);
+      }
+      const tbody = document.getElementById("dr-installs-table-body");
+      tbody.innerHTML = branchTotals.map(b => `<tr><td>${_escHtml(b.branch)}</td><td>${b.qty}</td></tr>`).join("") +
+        `<tr style="font-weight:700;"><td>TOTAL</td><td>${total}</td></tr>`;
+
+      const ctx = document.getElementById("drInstallsChart").getContext("2d");
+      if (_drInstallsChart) _drInstallsChart.destroy();
+      if (isWeekly) {
+        _drInstallsChart = new Chart(ctx, {
+          type: "bar",
+          data: { labels: branchTotals.map(b => b.branch), datasets: [{ label: "Instalaciones", data: branchTotals.map(b => b.qty), backgroundColor: "#4f46e5", borderRadius: 5 }] },
+          options: { responsive: true, maintainAspectRatio: false, plugins: { legend: { display: false } } }
+        });
+      } else {
+        const days = _drData.installs_by_month[value] || [];
+        _drInstallsChart = new Chart(ctx, {
+          type: "line",
+          data: { labels: days.map(d => d.day.slice(8, 10)), datasets: [{ label: "Instalaciones", data: days.map(d => d.total), borderColor: "#16a34a", backgroundColor: "rgba(22,163,74,0.12)", fill: true, tension: 0.3 }] },
+          options: { responsive: true, maintainAspectRatio: false, plugins: { legend: { display: false } } }
+        });
+      }
+    }
+
+    function _renderDrPending(pending) {
+      document.getElementById("dr-pending-since").textContent = `(desde ${pending.since_month})`;
+      const tbody = document.getElementById("dr-pending-table-body");
+      tbody.innerHTML = pending.branch_table.map(b => `<tr><td>${_escHtml(b.branch)}</td><td>${b.qty_pending}</td></tr>`).join("") +
+        `<tr style="font-weight:700;"><td>TOTAL</td><td>${pending.total_pending}</td></tr>`;
+    }
+
+    function _renderDrClosuresCharts(byMonth, byWeek, byDay) {
+      const ctx1 = document.getElementById("drClosuresMonthChart").getContext("2d");
+      if (_drClosuresMonthChart) _drClosuresMonthChart.destroy();
+      _drClosuresMonthChart = new Chart(ctx1, {
+        type: "bar",
+        data: { labels: byMonth.map(m => `${m.month_name} ${m.month_key.slice(0, 4)}`), datasets: [{ label: "Cierres", data: byMonth.map(m => m.qty_closed), backgroundColor: "#16a34a", borderRadius: 5 }] },
+        options: { responsive: true, maintainAspectRatio: false, plugins: { legend: { display: false } } }
+      });
+
+      const ctx2 = document.getElementById("drClosuresWeekChart").getContext("2d");
+      if (_drClosuresWeekChart) _drClosuresWeekChart.destroy();
+      _drClosuresWeekChart = new Chart(ctx2, {
+        type: "bar",
+        data: { labels: byWeek.map(w => w.week_label), datasets: [{ label: "Cierres", data: byWeek.map(w => w.qty_closed), backgroundColor: "#d97706", borderRadius: 5 }] },
+        options: { responsive: true, maintainAspectRatio: false, plugins: { legend: { display: false } } }
+      });
+
+      const ctx3 = document.getElementById("drClosuresDayChart").getContext("2d");
+      if (_drClosuresDayChart) _drClosuresDayChart.destroy();
+      _drClosuresDayChart = new Chart(ctx3, {
+        type: "line",
+        data: { labels: byDay.map(d => d.day), datasets: [{ label: "Cierres", data: byDay.map(d => d.qty_closed), borderColor: "#7c3aed", backgroundColor: "rgba(124,58,237,0.12)", fill: true, tension: 0.3 }] },
+        options: { responsive: true, maintainAspectRatio: false, plugins: { legend: { display: false } } }
+      });
+    }
+
+    document.querySelectorAll("[data-dr-period]").forEach(btn => {
+      btn.addEventListener("click", () => {
+        document.querySelectorAll("[data-dr-period]").forEach(b => b.classList.remove("active"));
+        btn.classList.add("active");
+        _drState.periodType = btn.dataset.drPeriod;
+        _populateDrPeriodSelect();
+        _renderDrInstalls();
+      });
+    });
+    document.getElementById("dr-period-select").addEventListener("change", _renderDrInstalls);
+    {% endif %}
 
     // ---------------- Mapa de cobertura KML + puntos de venta ----------------
     const map = L.map("coverage-map", { scrollWheelZoom: true }).setView([-9.19, -75.0152], 6);

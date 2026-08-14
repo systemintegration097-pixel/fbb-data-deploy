@@ -12,6 +12,7 @@ from flask import Flask, jsonify, request, send_from_directory, send_file
 import process_data
 import nims_topology
 import kpi_calc
+import daily_report
 import deploy_pending
 import cloud_sync
 import sheets_push
@@ -1919,6 +1920,39 @@ def kpi_refresh_reference():
 
 
 # ─────────────────────────────────────────────────────────────────────────────
+#  REPORTE DIARIO — instalaciones (deployments) por día/semana por branch, y
+#  averías pendientes/cerradas según GNOC (work_orders), desde julio en adelante.
+# ─────────────────────────────────────────────────────────────────────────────
+@app.route("/api/daily_report/overview")
+def daily_report_overview():
+    try:
+        return jsonify(_sanitize_for_json({
+            "pending": daily_report.compute_pending_by_branch(),
+            "closures_by_month": daily_report.compute_closures_by_month(),
+            "closures_by_week": daily_report.compute_closures_by_week(),
+            "closures_by_day": daily_report.compute_closures_by_day(),
+            "installs_periods": daily_report.get_installs_available_periods(),
+        }))
+    except Exception as e:
+        return jsonify({"error": str(e)}), 500
+
+@app.route("/api/daily_report/installs")
+def daily_report_installs():
+    try:
+        period_type = request.args.get("type", "month")
+        period_key = request.args.get("key", "").strip()
+        if not period_key:
+            return jsonify({"error": "Falta el parámetro 'key' (mes o semana)."}), 400
+        if period_type == "week":
+            data = daily_report.compute_installs_weekly(period_key)
+        else:
+            data = daily_report.compute_installs_daily(period_key)
+        return jsonify(_sanitize_for_json({"type": period_type, "key": period_key, "data": data}))
+    except Exception as e:
+        return jsonify({"error": str(e)}), 500
+
+
+# ─────────────────────────────────────────────────────────────────────────────
 #  DESPLIEGUES PENDIENTES — integra la automatización "deploy ant" (Tableau
 #  Deploy WO Pending -> Google Sheet propio) al dashboard.
 # ─────────────────────────────────────────────────────────────────────────────
@@ -2555,6 +2589,13 @@ def _auto_excel_sync_loop():
                         print(f"[AutoSync] Push a Google Sheets OK ({filas} filas).", flush=True)
                     except Exception as e:
                         print(f"[AutoSync] Push a Google Sheets falló: {e}", flush=True)
+                    if cloud_sync.is_configured():
+                        try:
+                            payload = daily_report.build_cloud_payload()
+                            result = cloud_sync.push_daily_report(payload)
+                            print(f"[AutoSync] Push Reporte Diario a la nube: {result}", flush=True)
+                        except Exception as e:
+                            print(f"[AutoSync] Push de Reporte Diario a la nube falló: {e}", flush=True)
                 else:
                     print(f"[AutoSync] Sync de Excel terminó en estado '{estado_final['state']}' -- se omite el push a Sheets.", flush=True)
         except Exception as e:

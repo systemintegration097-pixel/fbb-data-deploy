@@ -181,6 +181,14 @@ def create_app():
         geojson = db.get_all_branch_coverage() if session.get("is_admin") else db.get_branch_coverage(session["branch_code"])
         return jsonify({"geojson": geojson})
 
+    @app.route("/api/admin/daily_report")
+    @require_login
+    def admin_daily_report():
+        if not session.get("is_admin"):
+            return jsonify({"error": "forbidden"}), 403
+        report = db.get_daily_report()
+        return jsonify({"report": report, "updated_at": (report or {}).get("generated_at")})
+
     # ---------------- Machine-to-machine (API key auth) ----------------
 
     @app.route("/api/sync/push", methods=["POST"])
@@ -214,6 +222,15 @@ def create_app():
             return jsonify({"error": "branch_code y geojson (objeto) son requeridos"}), 400
         db.upsert_branch_coverage(branch_code, geojson_obj)
         return jsonify({"ok": True, "branch_code": branch_code, "features": len(geojson_obj.get("features", []))})
+
+    @app.route("/api/sync/push_daily_report", methods=["POST"])
+    @require_api_key
+    def sync_push_daily_report():
+        payload = request.get_json(silent=True) or {}
+        if not payload:
+            return jsonify({"error": "body vacío"}), 400
+        db.set_daily_report(payload)
+        return jsonify({"ok": True, "generated_at": payload.get("generated_at")})
 
     @app.route("/api/sync/seed_user", methods=["POST"])
     @require_api_key

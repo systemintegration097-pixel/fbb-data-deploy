@@ -86,6 +86,28 @@ def get_cached_comments():
         return dict(_comments_cache)
 
 
+def push_daily_report(payload):
+    """Sube el snapshot completo del Reporte Diario (instalaciones, averías
+    pendientes y cierres) para que el admin lo vea en el portal en la nube.
+    Se corre después de cada Sincronización de Excel automática (ver
+    _auto_excel_sync_loop en server.py), no en su propio ciclo -- es la
+    fuente de datos (WOs de GNOC) que más cambia de las dos que combina."""
+    if not is_configured():
+        return {"ok": False, "error": "cloud sync no configurado (CLOUD_SYNC_URL/CLOUD_API_KEY)"}
+    try:
+        resp = requests.post(
+            f"{CLOUD_SYNC_URL}/api/sync/push_daily_report",
+            json=payload,
+            headers=_headers(),
+            timeout=REQUEST_TIMEOUT_SEC,
+        )
+        resp.raise_for_status()
+        return resp.json()
+    except Exception as e:
+        print(f"[cloud_sync] push_daily_report FALLÓ (no afecta el sync local): {e}")
+        return {"ok": False, "error": str(e)}
+
+
 def push_coverage(branch_code, geojson_obj):
     """Sube (reemplaza) la cobertura KML de UNA sucursal. Se corre manualmente
     (ver build_and_push_coverage.py) ya que la cobertura casi no cambia -- no

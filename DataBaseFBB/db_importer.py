@@ -364,6 +364,7 @@ def import_to_sqlite():
                 close_time_hrs REAL,
                 station_code TEXT,
                 month_year TEXT,
+                finish_date TEXT,
                 locally_modified INTEGER DEFAULT 0
             )
         """,
@@ -405,6 +406,9 @@ def import_to_sqlite():
             if table_name == "incidents":
                 if "week_number" not in columns:
                     cursor.execute("ALTER TABLE incidents ADD COLUMN week_number TEXT")
+            if table_name == "deployments":
+                if "finish_date" not in columns:
+                    cursor.execute("ALTER TABLE deployments ADD COLUMN finish_date TEXT")
                 
     # Re-create indexes
     cursor.execute("CREATE INDEX IF NOT EXISTS idx_boxes_zone ON boxes(zone)")
@@ -641,7 +645,9 @@ def import_to_sqlite():
                     col_mapping[c] = 'station_code'
                 elif 'mes' in c_lower and 'closed' in c_lower:
                     col_mapping[c] = 'month_year'
-            
+                elif c_lower == 'finish date':
+                    col_mapping[c] = 'finish_date'
+
             if 'partner' in col_mapping.values() and 'branch' in col_mapping.values():
                 df_dep_filtered = df_dep[list(col_mapping.keys())].copy()
                 df_dep_filtered.rename(columns=col_mapping, inplace=True)
@@ -655,7 +661,10 @@ def import_to_sqlite():
                     kpi_val = str(row.get('kpi_from_paid')).strip()
                     station_val = str(row.get('station_code')).strip()
                     my_val = str(row.get('month_year')).strip()
-                    
+
+                    raw_finish = row.get('finish_date')
+                    finish_val = str(raw_finish).strip() if not pd.isna(raw_finish) else None
+
                     raw_hours = row.get('close_time_hrs')
                     hours_val = None
                     if not pd.isna(raw_hours):
@@ -663,11 +672,11 @@ def import_to_sqlite():
                             hours_val = float(str(raw_hours).replace(',', '.'))
                         except ValueError:
                             hours_val = None
-                            
+
                     cursor.execute("""
-                        INSERT INTO deployments (partner, branch, kpi_from_paid, close_time_hrs, station_code, month_year, locally_modified)
-                        VALUES (?, ?, ?, ?, ?, ?, 0)
-                    """, (partner_val, branch_val, kpi_val, hours_val, station_val, my_val))
+                        INSERT INTO deployments (partner, branch, kpi_from_paid, close_time_hrs, station_code, month_year, finish_date, locally_modified)
+                        VALUES (?, ?, ?, ?, ?, ?, ?, 0)
+                    """, (partner_val, branch_val, kpi_val, hours_val, station_val, my_val, finish_val))
                     deployments_imported += 1
             else:
                 # Se saltó TODA la importación en silencio la última vez que la hoja de

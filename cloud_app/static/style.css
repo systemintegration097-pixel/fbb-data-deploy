@@ -309,6 +309,33 @@ tr:hover td { background: #fafbff; }
 .sale-popup { font-size: 0.85rem; line-height: 1.5; min-width: 180px; }
 .sale-popup strong { font-size: 0.9rem; }
 
+/* ---------------- Reporte Diario (solo admin) ---------------- */
+
+.report-card {
+  background: var(--card);
+  border-radius: var(--radius);
+  box-shadow: var(--shadow);
+  margin-bottom: 1.5rem;
+  overflow: hidden;
+}
+.report-card-header {
+  display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap;
+  gap: 0.75rem; padding: 1rem 1.25rem; border-bottom: 1px solid var(--border);
+}
+.report-card-header h2 { font-size: 1rem; margin: 0; font-weight: 700; letter-spacing: -0.01em; }
+.report-body { padding: 1.25rem; }
+.report-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(320px, 1fr)); gap: 1.25rem; align-items: start; }
+.report-grid.report-grid-3 { grid-template-columns: repeat(auto-fit, minmax(240px, 1fr)); }
+.chart-box { position: relative; height: 240px; }
+.report-section-title { font-size: 0.95rem; font-weight: 700; margin: 0 0 1rem; }
+
+.period-toggle { display: flex; gap: 4px; background: var(--border); border-radius: 10px; padding: 3px; }
+.period-toggle button {
+  cursor: pointer; border: none; background: transparent; color: var(--muted);
+  padding: 0.4rem 0.85rem; border-radius: 8px; font-size: 0.8rem; font-weight: 600; transition: all 0.15s;
+}
+.period-toggle button.active { background: #fff; color: var(--ink); box-shadow: 0 2px 6px -2px rgba(30,41,90,0.25); }
+
 /* ---------------- Historial (dialog nativo) ---------------- */
 
 dialog#history-dialog {

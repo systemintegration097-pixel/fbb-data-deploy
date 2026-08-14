@@ -89,6 +89,7 @@ const PAGE_TITLES = {
     topology: ["Inspector de Topología", "Validación en vivo GPON + BRAS por Site/OLT/HUBBOX"],
     olt: ["Auditoría OLT", "Estado de ONUs, puertos caídos y cortes masivos detectados en tiempo real"],
     kpi: ["Reporte KPI", "WO Incident Report — calculado en vivo desde las WOs de GNOC ya descargadas"],
+    "daily-report": ["Reporte Diario", "Instalaciones diarias/semanales, averías pendientes y cierres por branch — GNOC + FBB DATA"],
     credentials: ["Credenciales", "Usuario y contraseña de los portales que usa la sincronización (GNOC, Tableau, CNOC)"],
     "fbb-dashboard": ["Panel de Control", "Visualización general de la red de banda ancha fija."],
     "fbb-zones": ["Zonas Activas", "Administración y estado de las zonas FBB a nivel nacional."],
@@ -2840,9 +2841,9 @@ document.addEventListener("DOMContentLoaded", () => {
     document.getElementById("nav-kpi")?.addEventListener("click", () => {
         if (!_kpiState.periods) _initKpiPage();
     });
-    document.querySelectorAll(".kpi-period-btn").forEach(btn => {
+    document.querySelectorAll("#page-kpi .kpi-period-btn").forEach(btn => {
         btn.addEventListener("click", () => {
-            document.querySelectorAll(".kpi-period-btn").forEach(b => b.classList.remove("active"));
+            document.querySelectorAll("#page-kpi .kpi-period-btn").forEach(b => b.classList.remove("active"));
             btn.classList.add("active");
             _kpiState.periodType = btn.dataset.kpiPeriod;
             _populateKpiPeriodSelect();
@@ -2852,6 +2853,21 @@ document.addEventListener("DOMContentLoaded", () => {
     });
     document.getElementById("kpi-period-select")?.addEventListener("change", _loadKpiData);
     document.getElementById("btn-kpi-refresh-reference")?.addEventListener("click", _refreshKpiReference);
+
+    // ── Página Reporte Diario ──────────────────────────────────
+    document.getElementById("nav-daily-report")?.addEventListener("click", () => {
+        if (!_drOverview) _initDailyReportPage();
+    });
+    document.querySelectorAll("[data-dr-period]").forEach(btn => {
+        btn.addEventListener("click", () => {
+            document.querySelectorAll("[data-dr-period]").forEach(b => b.classList.remove("active"));
+            btn.classList.add("active");
+            _drState.periodType = btn.dataset.drPeriod;
+            _populateDrPeriodSelect();
+            _loadDrInstalls();
+        });
+    });
+    document.getElementById("dr-period-select")?.addEventListener("change", _loadDrInstalls);
 });
 
 // ═════════════════════════════════════════════════════════════
@@ -3104,6 +3120,155 @@ async function _refreshKpiReference() {
         btn.disabled = false;
         btn.innerHTML = originalHtml;
     }
+}
+
+// ═════════════════════════════════════════════════════════════
+//  REPORTE DIARIO (instalaciones + averías pendientes/cierres)
+// ═════════════════════════════════════════════════════════════
+let _drOverview = null;
+let _drInstallsChart = null, _drClosuresMonthChart = null, _drClosuresWeekChart = null, _drClosuresDayChart = null;
+const _drState = { periodType: "monthly" };
+
+async function _initDailyReportPage() {
+    const loadingEl = document.getElementById("dr-loading");
+    const contentEl = document.getElementById("dr-content");
+    try {
+        const r = await fetch("/api/daily_report/overview");
+        _drOverview = await r.json();
+        if (!r.ok) throw new Error(_drOverview.error || "Error al cargar el reporte diario.");
+
+        _renderDrPending(_drOverview.pending);
+        _renderDrClosuresCharts(_drOverview.closures_by_month, _drOverview.closures_by_week, _drOverview.closures_by_day);
+        _populateDrPeriodSelect();
+        await _loadDrInstalls();
+
+        loadingEl.style.display = "none";
+        contentEl.style.display = "block";
+    } catch (err) {
+        loadingEl.innerHTML = `<span style="color:#D93025;"><i class="fa-solid fa-triangle-exclamation"></i> ${err.message}</span>`;
+    }
+}
+
+function _populateDrPeriodSelect() {
+    const select = document.getElementById("dr-period-select");
+    if (!select || !_drOverview) return;
+    const periods = _drOverview.installs_periods || { months: [], weeks: [] };
+    const list = _drState.periodType === "monthly" ? periods.months : periods.weeks;
+    const valueKey = _drState.periodType === "monthly" ? "month_key" : "week_key";
+    select.innerHTML = list.map(p => `<option value="${p[valueKey]}">${p.label}</option>`).join("");
+    if (list.length) select.value = list[list.length - 1][valueKey];
+}
+
+async function _loadDrInstalls() {
+    const select = document.getElementById("dr-period-select");
+    const value = select?.value;
+    if (!value) return;
+
+    try {
+        const endpoint = `/api/daily_report/installs?type=${_drState.periodType === "monthly" ? "month" : "week"}&key=${encodeURIComponent(value)}`;
+        const r = await fetch(endpoint);
+        const result = await r.json();
+        if (!r.ok) throw new Error(result.error || "Error al cargar instalaciones.");
+
+        const isWeekly = _drState.periodType === "weekly";
+        const label = select.options[select.selectedIndex]?.textContent || value;
+
+        document.getElementById("dr-installs-table-title").innerHTML =
+            `<i class="fa-solid fa-building-user" style="color:#4285F4;margin-right:8px;"></i> Instalaciones por Branch — ${label}`;
+        document.getElementById("dr-installs-chart-title").textContent = isWeekly ? "Instalaciones por Branch" : "Instalaciones por Día";
+
+        let branchTotals, total;
+        if (isWeekly) {
+            branchTotals = result.data.branch_table.map(b => ({ branch: b.branch, qty: b.qty }));
+            total = result.data.total;
+        } else {
+            const days = result.data;
+            const branchList = _drOverview.pending.branch_table.map(b => b.branch);
+            branchTotals = branchList.map(br => ({
+                branch: br,
+                qty: days.reduce((sum, d) => sum + (d[br] || 0), 0)
+            }));
+            total = days.reduce((sum, d) => sum + d.total, 0);
+        }
+
+        const tbody = document.getElementById("dr-installs-table-body");
+        tbody.innerHTML = branchTotals.map(b => `
+            <tr><td>${b.branch}</td><td class="text-center">${b.qty}</td></tr>
+        `).join("") + `
+            <tr style="font-weight:700;border-top:2px solid rgba(255,255,255,0.1);">
+                <td>TOTAL</td><td class="text-center">${total}</td>
+            </tr>
+        `;
+
+        const ctx = document.getElementById("drInstallsChart").getContext("2d");
+        if (_drInstallsChart) _drInstallsChart.destroy();
+        if (isWeekly) {
+            _drInstallsChart = new Chart(ctx, {
+                type: "bar",
+                data: { labels: branchTotals.map(b => b.branch), datasets: [{ label: "Instalaciones", data: branchTotals.map(b => b.qty), backgroundColor: "#1A73E8", borderRadius: 5 }] },
+                options: { responsive: true, maintainAspectRatio: false, plugins: { legend: { display: false } } }
+            });
+        } else {
+            const days = result.data;
+            _drInstallsChart = new Chart(ctx, {
+                type: "line",
+                data: {
+                    labels: days.map(d => d.day.slice(8, 10)),
+                    datasets: [{ label: "Instalaciones", data: days.map(d => d.total), borderColor: "#0F9D58", backgroundColor: "rgba(15,157,88,0.15)", fill: true, tension: 0.3 }]
+                },
+                options: { responsive: true, maintainAspectRatio: false, plugins: { legend: { display: false } } }
+            });
+        }
+    } catch (err) {
+        console.error("Error al cargar instalaciones del Reporte Diario:", err);
+    }
+}
+
+function _renderDrPending(pending) {
+    document.getElementById("dr-pending-since").textContent = `(desde ${pending.since_month})`;
+    const tbody = document.getElementById("dr-pending-table-body");
+    tbody.innerHTML = pending.branch_table.map(b => `
+        <tr><td>${b.branch}</td><td class="text-center">${b.qty_pending}</td></tr>
+    `).join("") + `
+        <tr style="font-weight:700;border-top:2px solid rgba(255,255,255,0.1);">
+            <td>TOTAL</td><td class="text-center">${pending.total_pending}</td>
+        </tr>
+    `;
+}
+
+function _renderDrClosuresCharts(byMonth, byWeek, byDay) {
+    const ctx1 = document.getElementById("drClosuresMonthChart").getContext("2d");
+    if (_drClosuresMonthChart) _drClosuresMonthChart.destroy();
+    _drClosuresMonthChart = new Chart(ctx1, {
+        type: "bar",
+        data: {
+            labels: byMonth.map(m => `${m.month_name} ${m.month_key.slice(0, 4)}`),
+            datasets: [{ label: "Cierres", data: byMonth.map(m => m.qty_closed), backgroundColor: "#0F9D58", borderRadius: 5 }]
+        },
+        options: { responsive: true, maintainAspectRatio: false, plugins: { legend: { display: false } } }
+    });
+
+    const ctx2 = document.getElementById("drClosuresWeekChart").getContext("2d");
+    if (_drClosuresWeekChart) _drClosuresWeekChart.destroy();
+    _drClosuresWeekChart = new Chart(ctx2, {
+        type: "bar",
+        data: {
+            labels: byWeek.map(w => w.week_label),
+            datasets: [{ label: "Cierres", data: byWeek.map(w => w.qty_closed), backgroundColor: "#F4B400", borderRadius: 5 }]
+        },
+        options: { responsive: true, maintainAspectRatio: false, plugins: { legend: { display: false } } }
+    });
+
+    const ctx3 = document.getElementById("drClosuresDayChart").getContext("2d");
+    if (_drClosuresDayChart) _drClosuresDayChart.destroy();
+    _drClosuresDayChart = new Chart(ctx3, {
+        type: "line",
+        data: {
+            labels: byDay.map(d => d.day),
+            datasets: [{ label: "Cierres", data: byDay.map(d => d.qty_closed), borderColor: "#AB47BC", backgroundColor: "rgba(171,71,188,0.15)", fill: true, tension: 0.3 }]
+        },
+        options: { responsive: true, maintainAspectRatio: false, plugins: { legend: { display: false } } }
+    });
 }
 
 // ═════════════════════════════════════════════════════════════
