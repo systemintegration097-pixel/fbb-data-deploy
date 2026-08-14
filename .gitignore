@@ -7,6 +7,7 @@ google_service_account.json
 **/*credenciales*.json
 **/*service_account*.json
 nims_login_state.json
+deploy_pending_last_good.json
 
 # --- Python ---
 __pycache__/

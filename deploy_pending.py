@@ -7,6 +7,7 @@ desde Tableau y lo sube a su propio Google Sheet, ver deploy ant/deploy.py) al d
 - Permite disparar deploy.py como subproceso desde el botón "Actualizar Despliegues" del
   dashboard, en vez de tener que correrlo a mano.
 """
+import json
 import os
 import sys
 import subprocess
@@ -22,6 +23,7 @@ BASE_PATH = os.path.dirname(os.path.abspath(__file__))
 DEPLOY_DIR = os.path.join(BASE_PATH, "deploy ant")
 DEPLOY_SCRIPT = os.path.join(DEPLOY_DIR, "deploy.py")
 LOG_FILE = os.path.join(DEPLOY_DIR, "automatizacion_fbb.log")
+LAST_GOOD_FILE = os.path.join(BASE_PATH, "deploy_pending_last_good.json")
 
 SPREADSHEET_ID = "1Taraoyp9CDgZHzIDPNgoyDjkK2JQaCE9wi-_iuOvSJA"
 SCOPES_RO = ["https://www.googleapis.com/auth/spreadsheets.readonly"]
@@ -97,6 +99,22 @@ def get_summary():
         "checked_at": datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
         "last_deploy_run": _get_last_success_time(),
     }
+
+
+def _load_last_good_total():
+    try:
+        with open(LAST_GOOD_FILE, "r", encoding="utf-8") as f:
+            return json.load(f).get("total")
+    except Exception:
+        return None
+
+
+def _save_last_good_total(total):
+    try:
+        with open(LAST_GOOD_FILE, "w", encoding="utf-8") as f:
+            json.dump({"total": total, "saved_at": datetime.now().strftime("%Y-%m-%d %H:%M:%S")}, f)
+    except Exception:
+        pass
 
 
 def _get_last_success_time():
@@ -237,11 +255,29 @@ def _run_worker():
             # está caída, solo se loguea.
             try:
                 resumen = get_summary()
-                cloud_sync.push_clients(
-                    resumen["clients"],
-                    last_deploy_run=resumen.get("last_deploy_run"),
-                    checked_at=resumen.get("checked_at"),
-                )
+                last_good = _load_last_good_total()
+                # Guard: deploy.py hace un batch_clear() + rewrite completo de "WO
+                # Pendiente" en cada corrida -si el crosstab que Tableau exportó esa vez
+                # salió mal (ej. Selenium seleccionó el menú equivocado, ver el historial
+                # de bugs de stale element en deploy ant/deploy.py), el resultado puede
+                # ser un puñado de filas con columnas corridas en vez de un error visible.
+                # Sin este chequeo, esa basura se sube igual a la nube (donde la ven los
+                # encargados de sucursal) porque el script SÍ logueó "éxito". Un total
+                # muy por debajo del último bueno es la señal más simple de detectarlo.
+                if last_good and resumen["total"] < last_good * 0.5:
+                    print(
+                        f"[deploy_pending] ALERTA: esta corrida trajo solo {resumen['total']} "
+                        f"clientes (la última buena tenía {last_good}) -- pinta a un export de "
+                        f"Tableau incompleto/incorrecto. Se omite el push a la nube para no pisar "
+                        f"datos buenos con datos sospechosos; revisar 'WO Pendiente' a mano."
+                    )
+                else:
+                    cloud_sync.push_clients(
+                        resumen["clients"],
+                        last_deploy_run=resumen.get("last_deploy_run"),
+                        checked_at=resumen.get("checked_at"),
+                    )
+                    _save_last_good_total(resumen["total"])
             except Exception as e:
                 print(f"[deploy_pending] No se pudo subir a la nube (no afecta el resultado local): {e}")
     except Exception as e:
