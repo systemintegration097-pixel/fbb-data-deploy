@@ -65,6 +65,10 @@ def get_summary():
             # El teléfono llega con comas de separador de miles (formato numérico de
             # Sheets aplicado a una columna que en realidad es texto), se limpia acá.
             "phone": r[6].strip().replace(",", "") if len(r) > 6 else "",
+            # Vienen con coma como separador decimal (formato regional de Sheets), no
+            # punto -inválido para Leaflet/JS tal cual.
+            "lat": r[7].strip().replace(",", ".") if len(r) > 7 else "",
+            "lng": r[8].strip().replace(",", ".") if len(r) > 8 else "",
             # VSMART_CREATE_TIME: fecha en la que se creó la venta en el sistema.
             "sale_date": r[12].strip() if len(r) > 12 else "",
             "deployment_type": r[14].strip() if len(r) > 14 else "",

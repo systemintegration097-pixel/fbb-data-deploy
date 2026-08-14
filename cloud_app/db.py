@@ -7,7 +7,7 @@ DATABASE_URL = os.environ.get("DATABASE_URL", "")
 
 CLIENT_FIELDS = (
     "partner", "shop_code", "customer_name", "phone", "sale_date",
-    "deployment_type", "pending_days", "ft_code", "connector_code",
+    "deployment_type", "pending_days", "ft_code", "connector_code", "lat", "lng",
 )
 
 
@@ -49,6 +49,8 @@ def init_db():
                     pending_days TEXT,
                     ft_code TEXT,
                     connector_code TEXT,
+                    lat TEXT,
+                    lng TEXT,
                     comment TEXT DEFAULT '',
                     status TEXT DEFAULT '',
                     comment_updated_by TEXT,
@@ -58,6 +60,8 @@ def init_db():
                     is_active BOOLEAN DEFAULT TRUE
                 );
                 ALTER TABLE pending_clients ADD COLUMN IF NOT EXISTS sale_date TEXT;
+                ALTER TABLE pending_clients ADD COLUMN IF NOT EXISTS lat TEXT;
+                ALTER TABLE pending_clients ADD COLUMN IF NOT EXISTS lng TEXT;
                 CREATE INDEX IF NOT EXISTS idx_pending_clients_branch ON pending_clients(branch);
                 CREATE INDEX IF NOT EXISTS idx_pending_clients_active ON pending_clients(is_active);
 

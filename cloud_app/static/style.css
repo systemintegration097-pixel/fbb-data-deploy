@@ -306,6 +306,9 @@ tr:hover td { background: #fafbff; }
 
 #coverage-map { height: 380px; width: 100%; }
 
+.sale-popup { font-size: 0.85rem; line-height: 1.5; min-width: 180px; }
+.sale-popup strong { font-size: 0.9rem; }
+
 /* ---------------- Historial (dialog nativo) ---------------- */
 
 dialog#history-dialog {

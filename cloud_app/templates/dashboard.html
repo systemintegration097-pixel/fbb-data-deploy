@@ -111,7 +111,7 @@
       </thead>
       <tbody id="clients-tbody">
         {% for c in clients %}
-        <tr class="{{ 'row-over72' if c.deployment_type == 'Over 72h' else '' }}" data-account="{{ c.account }}" data-partner="{{ c.partner or '' }}" data-shop-code="{{ c.shop_code or '' }}" data-branch="{{ c.branch or '' }}">
+        <tr class="{{ 'row-over72' if c.deployment_type == 'Over 72h' else '' }}" data-account="{{ c.account }}" data-partner="{{ c.partner or '' }}" data-shop-code="{{ c.shop_code or '' }}" data-branch="{{ c.branch or '' }}" data-lat="{{ c.lat or '' }}" data-lng="{{ c.lng or '' }}" data-customer="{{ c.customer_name or '' }}" data-phone="{{ c.phone or '' }}" data-deployment-type="{{ c.deployment_type or '' }}" data-pending-days="{{ c.pending_days or '' }}" data-sale-date="{{ c.sale_date or '' }}">
           {% if is_admin %}<td class="mono">{{ c.branch }}</td>{% endif %}
           <td>{{ c.account }}</td>
           <td>{{ c.customer_name }}</td>
@@ -144,6 +144,12 @@
           integrity="sha256-20nQCchB9co0qIjJZRGuk2/Z9VM+kNiyxNV1lvTlZBo=" crossorigin=""></script>
   <script>
     const CSRF_TOKEN = "{{ csrf_token() }}";
+
+    function _escHtml(str) {
+      return String(str ?? "").replace(/[&<>"']/g, (c) => ({
+        "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;",
+      }[c]));
+    }
 
     async function saveComment(btn) {
       const row = btn.closest("tr");
@@ -198,6 +204,68 @@
       }
     }
 
+    // ---------------- Mapa de cobertura KML + puntos de venta ----------------
+    const map = L.map("coverage-map", { scrollWheelZoom: true }).setView([-9.19, -75.0152], 6);
+    L.tileLayer("https://{s}.basemaps.cartocdn.com/light_all/{z}/{x}/{y}{r}.png", {
+      attribution: '&copy; OpenStreetMap &copy; CARTO',
+      maxZoom: 19,
+    }).addTo(map);
+
+    fetch("/api/my/coverage")
+      .then(r => r.json())
+      .then(data => {
+        if (!data.geojson || !data.geojson.features || !data.geojson.features.length) {
+          document.getElementById("map-empty-state").style.display = "block";
+          return;
+        }
+        const layer = L.geoJSON(data.geojson, {
+          style: { color: "#4f46e5", weight: 1.5, fillColor: "#7c3aed", fillOpacity: 0.12, dashArray: "3" },
+          onEachFeature: (feature, lyr) => {
+            if (feature.properties && feature.properties.name) {
+              lyr.bindPopup(feature.properties.name);
+            }
+          },
+        }).addTo(map);
+        map.fitBounds(layer.getBounds(), { padding: [20, 20] });
+      })
+      .catch(() => { document.getElementById("map-empty-state").style.display = "block"; });
+
+    // Puntos de venta (instalaciones pendientes): un punto por cliente con lat/lng
+    // válido, coloreado según el tipo (mismo esquema que las tarjetas de resumen).
+    // Se guardan en un Map keyed por <tr> para que los filtros de la tabla puedan
+    // mostrar/ocultar el marcador correspondiente en sync.
+    const saleMarkersLayer = L.layerGroup().addTo(map);
+    const saleMarkers = new Map(); // <tr> -> L.circleMarker
+
+    function _saleMarkerColor(deploymentType) {
+      if (deploymentType === "Over 72h") return "#e0392b";
+      if (deploymentType === "Over 48h" || deploymentType === "Over 24h") return "#d97706";
+      if (deploymentType === "Under 24h") return "#16a34a";
+      return "#4f46e5";
+    }
+
+    document.querySelectorAll("#clients-tbody tr[data-account]").forEach(row => {
+      const lat = parseFloat(row.dataset.lat);
+      const lng = parseFloat(row.dataset.lng);
+      if (Number.isNaN(lat) || Number.isNaN(lng) || (lat === 0 && lng === 0)) return;
+      const marker = L.circleMarker([lat, lng], {
+        radius: 7, weight: 2, color: "#fff", fillColor: _saleMarkerColor(row.dataset.deploymentType), fillOpacity: 0.9,
+      });
+      marker.bindPopup(`
+        <div class="sale-popup">
+          <strong>${_escHtml(row.dataset.customer || "—")}</strong><br>
+          <span class="mono">${_escHtml(row.dataset.account)}</span><br>
+          Tel: ${_escHtml(row.dataset.phone || "—")}<br>
+          ${row.dataset.branch ? `Branch: ${_escHtml(row.dataset.branch)}<br>` : ""}
+          Sales Code: ${_escHtml(row.dataset.shopCode || "—")}<br>
+          Tipo: ${_escHtml(row.dataset.deploymentType || "—")} &middot; Días: ${_escHtml(row.dataset.pendingDays || "—")}<br>
+          Venta: ${_escHtml(row.dataset.saleDate || "—")}
+        </div>
+      `);
+      saleMarkers.set(row, marker);
+      marker.addTo(saleMarkersLayer);
+    });
+
     // ---------------- Filtros: Partner + Sales Code (multi) ----------------
     (function setupFilters() {
       const rows = [...document.querySelectorAll("#clients-tbody tr[data-account]")];
@@ -247,7 +315,9 @@
         const partner = partnerSelect.value;
         const selectedCodes = salesCodeCheckboxes.filter(cb => cb.checked).map(cb => cb.value);
         const searchTerm = searchInput.value.trim().toLowerCase();
+        const hasActiveFilter = !!(branchVal || partner || selectedCodes.length || searchTerm);
         let visible = 0;
+        const visibleMarkers = [];
         rows.forEach(row => {
           const matchesBranch = !branchVal || row.dataset.branch === branchVal;
           const matchesPartner = !partner || row.dataset.partner === partner;
@@ -256,11 +326,30 @@
           const show = matchesBranch && matchesPartner && matchesCode && matchesSearch;
           row.style.display = show ? "" : "none";
           if (show) visible++;
+
+          // Mantener los puntos del mapa en sync con lo que se ve en la tabla.
+          const marker = saleMarkers.get(row);
+          if (marker) {
+            if (show) {
+              if (!saleMarkersLayer.hasLayer(marker)) marker.addTo(saleMarkersLayer);
+              visibleMarkers.push(marker);
+            } else {
+              saleMarkersLayer.removeLayer(marker);
+            }
+          }
         });
         document.getElementById("filter-count").textContent = `${visible} de ${rows.length}`;
         const badge = document.getElementById("salescode-filter-badge");
         if (selectedCodes.length) { badge.hidden = false; badge.textContent = selectedCodes.length; }
         else { badge.hidden = true; }
+
+        // Solo re-centrar el mapa cuando hay un filtro REALMENTE activo -en la carga
+        // inicial (todo visible, sin filtros) el mapa se queda mostrando la cobertura
+        // completa como siempre, no salta a intentar encuadrar todos los puntos.
+        if (hasActiveFilter && visibleMarkers.length) {
+          const group = L.featureGroup(visibleMarkers);
+          map.fitBounds(group.getBounds().pad(0.25), { maxZoom: 16 });
+        }
       }
 
       document.getElementById("salescode-select-all").addEventListener("click", () => {
@@ -287,32 +376,7 @@
       applyFilters();
     })();
 
-    // ---------------- Mapa de cobertura KML + regla de distancia ----------------
-    const map = L.map("coverage-map", { scrollWheelZoom: true }).setView([-9.19, -75.0152], 6);
-    L.tileLayer("https://{s}.basemaps.cartocdn.com/light_all/{z}/{x}/{y}{r}.png", {
-      attribution: '&copy; OpenStreetMap &copy; CARTO',
-      maxZoom: 19,
-    }).addTo(map);
-
-    fetch("/api/my/coverage")
-      .then(r => r.json())
-      .then(data => {
-        if (!data.geojson || !data.geojson.features || !data.geojson.features.length) {
-          document.getElementById("map-empty-state").style.display = "block";
-          return;
-        }
-        const layer = L.geoJSON(data.geojson, {
-          style: { color: "#4f46e5", weight: 1.5, fillColor: "#7c3aed", fillOpacity: 0.12, dashArray: "3" },
-          onEachFeature: (feature, lyr) => {
-            if (feature.properties && feature.properties.name) {
-              lyr.bindPopup(feature.properties.name);
-            }
-          },
-        }).addTo(map);
-        map.fitBounds(layer.getBounds(), { padding: [20, 20] });
-      })
-      .catch(() => { document.getElementById("map-empty-state").style.display = "block"; });
-
+    // ---------------- Regla de distancia ----------------
     let manualMarker = null;
     function placeManualMarker() {
       const raw = document.getElementById("manual-coords").value;
