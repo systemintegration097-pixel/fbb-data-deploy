@@ -432,10 +432,7 @@
       return "#4f46e5";
     }
 
-    document.querySelectorAll("#clients-tbody tr[data-account]").forEach(row => {
-      const lat = parseFloat(row.dataset.lat);
-      const lng = parseFloat(row.dataset.lng);
-      if (Number.isNaN(lat) || Number.isNaN(lng) || (lat === 0 && lng === 0)) return;
+    function _createSaleMarker(row, lat, lng) {
       const marker = L.circleMarker([lat, lng], {
         radius: 7, weight: 2, color: "#fff", fillColor: _saleMarkerColor(row.dataset.deploymentType), fillOpacity: 0.9,
       });
@@ -450,8 +447,43 @@
           Venta: ${_escHtml(row.dataset.saleDate || "—")}
         </div>
       `);
+      // Al pasar el mouse se trae al frente del stack de SVG -así, aunque dos puntos
+      // sigan solapados en pantalla, el que el usuario está apuntando queda encima y
+      // recibe el click (antes SIEMPRE ganaba el último dibujado, que por el orden de
+      // la tabla -Under 24h, Over 72h, Over 48h, Over 24h- resultaba ser el naranja).
+      marker.on("mouseover", () => marker.bringToFront());
       saleMarkers.set(row, marker);
       marker.addTo(saleMarkersLayer);
+    }
+
+    // Varios clientes pueden compartir la misma dirección/edificio (mismo lat/lng
+    // exacto o casi) -en ese caso los círculos quedan perfectamente encimados y solo
+    // el de arriba del stack recibe clicks. Se agrupan por coordenada redondeada y se
+    // separan en un pequeño anillo para que TODOS queden clickeables individualmente.
+    const _coordGroups = new Map(); // "lat,lng" (4 decimales, ~11m) -> [{row, lat, lng}]
+    document.querySelectorAll("#clients-tbody tr[data-account]").forEach(row => {
+      const lat = parseFloat(row.dataset.lat);
+      const lng = parseFloat(row.dataset.lng);
+      if (Number.isNaN(lat) || Number.isNaN(lng) || (lat === 0 && lng === 0)) return;
+      const key = `${lat.toFixed(4)},${lng.toFixed(4)}`;
+      if (!_coordGroups.has(key)) _coordGroups.set(key, []);
+      _coordGroups.get(key).push({ row, lat, lng });
+    });
+
+    _coordGroups.forEach(group => {
+      if (group.length === 1) {
+        const { row, lat, lng } = group[0];
+        _createSaleMarker(row, lat, lng);
+        return;
+      }
+      const ringRadiusMeters = 12; // separación visible al hacer zoom, sin desubicar el punto real
+      const ringRadiusDeg = ringRadiusMeters / 111320;
+      group.forEach((item, i) => {
+        const angle = (2 * Math.PI * i) / group.length;
+        const lat = item.lat + ringRadiusDeg * Math.cos(angle);
+        const lng = item.lng + (ringRadiusDeg * Math.sin(angle)) / Math.cos(item.lat * Math.PI / 180);
+        _createSaleMarker(item.row, lat, lng);
+      });
     });
 
     // ---------------- Filtros: Partner + Sales Code (multi) ----------------
