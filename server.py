@@ -2571,7 +2571,6 @@ def _auto_excel_sync_loop():
     el usuario ya está sincronizando a mano cuando le toca a este ciclo, se salta esa vuelta
     en vez de pelear por el mismo sync_lock."""
     while True:
-        cycle_start = time.time()
         try:
             with sync_lock:
                 ya_corriendo = sync_status["state"] in ("downloading", "processing")
@@ -2600,14 +2599,18 @@ def _auto_excel_sync_loop():
                     print(f"[AutoSync] Sync de Excel terminó en estado '{estado_final['state']}' -- se omite el push a Sheets.", flush=True)
         except Exception as e:
             print(f"[AutoSync] Error inesperado en el ciclo automático: {e}", flush=True)
-        time.sleep(max(0, AUTO_SYNC_LOOP_INTERVAL_SECONDS - (time.time() - cycle_start)))
+        # Siempre espera el intervalo COMPLETO tras terminar (sin restar cuánto duró el
+        # ciclo) -- si se restaba, un ciclo que tardaba más de 15 min (pasa seguido con
+        # GNOC/Tableau) dejaba la pausa en 0 y arrancaba el siguiente de inmediato, lo que
+        # causó procesos zombis compitiendo por los mismos recursos (ver incidente de hoy).
+        print(f"[AutoSync] Esperando {AUTO_SYNC_LOOP_INTERVAL_SECONDS // 60} min antes del siguiente ciclo...", flush=True)
+        time.sleep(AUTO_SYNC_LOOP_INTERVAL_SECONDS)
 
 def _auto_deploy_pending_loop():
     """Igual que _auto_excel_sync_loop pero para "Actualizar Despliegues" (deploy ant):
     trigger_run() ya trae su propio guard contra corridas simultáneas (devuelve False si
     ya hay una activa, manual o automática), así que alcanza con revisar ese resultado."""
     while True:
-        cycle_start = time.time()
         try:
             iniciado = deploy_pending.trigger_run()
             if not iniciado:
@@ -2620,7 +2623,8 @@ def _auto_deploy_pending_loop():
                 print(f"[AutoDeploy] Terminó en estado '{estado_final['state']}': {estado_final['message']}", flush=True)
         except Exception as e:
             print(f"[AutoDeploy] Error inesperado en el ciclo automático: {e}", flush=True)
-        time.sleep(max(0, AUTO_DEPLOY_LOOP_INTERVAL_SECONDS - (time.time() - cycle_start)))
+        print(f"[AutoDeploy] Esperando {AUTO_DEPLOY_LOOP_INTERVAL_SECONDS // 60} min antes del siguiente ciclo...", flush=True)
+        time.sleep(AUTO_DEPLOY_LOOP_INTERVAL_SECONDS)
 
 if __name__ == "__main__":
     print("Iniciando servidor de la Plataforma de Avance GNOC en http://localhost:5001 ...")
