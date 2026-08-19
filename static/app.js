@@ -2734,8 +2734,25 @@ function _renderOltDetail() {
     // Render Cortes
     const cortesWrap = document.getElementById("olt-detail-cortes-wrap");
     const cortesList = document.getElementById("olt-detail-cortes-list");
+    const cortesSummary = document.getElementById("olt-detail-cortes-summary");
     if (d.cortes && d.cortes.length > 0) {
         if (cortesWrap) cortesWrap.style.display = "block";
+
+        // Un mismo puerto puede tener un corte por LOS Y uno por energía a la vez -contarlos
+        // como dos "puertos caídos" separados infla el total (ver caso real: 16 puertos con
+        // corte, uno de ellos con ambos problemas, listaba "17"). El total debe ser puertos
+        // DISTINTOS afectados; el desglose por tipo sí puede sumar más que eso.
+        if (cortesSummary) {
+            const distinctPorts = new Set(d.cortes.map(c => c.pon));
+            const porTipo = {};
+            d.cortes.forEach(c => {
+                const label = _corteTypeLabel(c.tipo_corte);
+                porTipo[label] = (porTipo[label] || 0) + 1;
+            });
+            const desglose = Object.entries(porTipo).map(([label, n]) => `${n} por ${label.toLowerCase()}`).join(" · ");
+            cortesSummary.textContent = `${distinctPorts.size} ${distinctPorts.size === 1 ? "puerto" : "puertos"} con corte (${desglose})`;
+        }
+
         if (cortesList) {
             cortesList.innerHTML = d.cortes.map(c => `
                 <div style="background:rgba(234,67,53,0.12); border-left:4px solid #EA4335; padding:10px 14px; border-radius:4px; margin-bottom:6px; font-size:12px;">
