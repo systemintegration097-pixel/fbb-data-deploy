@@ -474,9 +474,12 @@ def get_typification_report():
     conn = get_db_connection()
     cursor = conn.cursor()
     try:
+        # Agrupado también por mes (además de por motivo) para poder armar columnas por
+        # mes en la tabla del dashboard, sin perder el total/pendientes agregado de siempre.
         query = """
             SELECT
                 COALESCE(NULLIF(close_reason, ''), 'PENDIENTE') as reason_name,
+                strftime('%Y-%m', create_time) as month_key,
                 COUNT(*) as total_wos,
                 SUM(CASE WHEN wo_status NOT IN ('Close', 'Closed', 'Closed FT', 'FT completed') THEN 1 ELSE 0 END) as pending_wos
             FROM work_orders
@@ -486,17 +489,21 @@ def get_typification_report():
             placeholders = ",".join(["?"] * len(months))
             query += f" WHERE strftime('%Y-%m', create_time) IN ({placeholders})"
             params.extend(months)
-        query += " GROUP BY reason_name ORDER BY total_wos DESC"
+        query += " GROUP BY reason_name, month_key"
 
         cursor.execute(query, params)
         rows = cursor.fetchall()
-        report = []
+
+        by_reason = {}
         for r in rows:
-            report.append({
-                "reason": r["reason_name"],
-                "total_wos": r["total_wos"],
-                "pending_wos": r["pending_wos"]
-            })
+            reason = r["reason_name"]
+            entry = by_reason.setdefault(reason, {"reason": reason, "total_wos": 0, "pending_wos": 0, "by_month": {}})
+            entry["total_wos"] += r["total_wos"]
+            entry["pending_wos"] += r["pending_wos"]
+            if r["month_key"]:
+                entry["by_month"][r["month_key"]] = entry["by_month"].get(r["month_key"], 0) + r["total_wos"]
+
+        report = sorted(by_reason.values(), key=lambda x: -x["total_wos"])
         return jsonify(report)
     except Exception as e:
         return jsonify({"error": str(e)}), 500
@@ -1362,11 +1369,12 @@ def get_stats():
         """)
         cd_groups = [{"cd_group": row["cd_group"], "count": row["count"]} for row in cursor.fetchall()]
 
-        # Distribución por Branch (averías totales, excluyendo errores de Marlo que no son averías reales)
+        # Distribución por Branch (averías PENDIENTES, mismo filtro que total_valid/pending_intervals
+        # arriba -- excluye errores de Marlo y WOs ya cerradas, no es el total histórico)
         cursor.execute("""
             SELECT COALESCE(NULLIF(branch, ''), 'SIN BRANCH') as branch_name, COUNT(*) as count
             FROM work_orders
-            WHERE is_error = 0
+            WHERE is_error = 0 AND LOWER(wo_status) NOT IN ('close', 'closed', 'closed ft', 'ft completed')
             GROUP BY branch_name
             ORDER BY count DESC
         """)

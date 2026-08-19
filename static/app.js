@@ -782,7 +782,7 @@ async function fetchStats() {
 
         // Generar gráficos
         renderSlaChart(stats.pending_intervals);
-        renderBranchChart(stats.branch_distribution.slice(0, 5));
+        renderBranchChart(stats.branch_distribution);
 
         // Llenar selectores del filtro CD
         populateCdFilter(stats.cd_groups_distribution);
@@ -1173,6 +1173,7 @@ function renderSlaChart(intervals) {
     
     slaChartInstance = new Chart(ctx, {
         type: 'doughnut',
+        plugins: [ChartDataLabels],
         data: {
             labels: ['< 24 horas', '24 - 48 horas', '48 - 72 horas', '> 72 horas'],
             datasets: [{
@@ -1194,6 +1195,11 @@ function renderSlaChart(intervals) {
                 legend: {
                     position: 'bottom',
                     labels: { color: '#16233A', font: { family: 'Outfit', size: 12 } }
+                },
+                datalabels: {
+                    color: '#fff',
+                    font: { family: 'Outfit', size: 13, weight: 'bold' },
+                    formatter: (value) => value > 0 ? value : ''
                 }
             }
         }
@@ -1213,10 +1219,11 @@ function renderBranchChart(branchData) {
 
     branchChartInstance = new Chart(ctx, {
         type: 'bar',
+        plugins: [ChartDataLabels],
         data: {
             labels: labels,
             datasets: [{
-                label: 'Cantidad de WOs',
+                label: 'Averías Pendientes',
                 data: counts,
                 backgroundColor: '#1A73E8',
                 borderRadius: 5
@@ -1227,7 +1234,14 @@ function renderBranchChart(branchData) {
             responsive: true,
             maintainAspectRatio: false,
             plugins: {
-                legend: { display: false }
+                legend: { display: false },
+                datalabels: {
+                    color: '#16233A',
+                    anchor: 'end',
+                    align: 'end',
+                    font: { family: 'Outfit', size: 11, weight: 'bold' },
+                    formatter: (value) => value > 0 ? value : ''
+                }
             },
             scales: {
                 x: {
@@ -1243,20 +1257,21 @@ function renderBranchChart(branchData) {
     });
 }
 
-// Gráfico 3: Motivos de Cierre Vertical Bar
+// Gráfico 3: Motivos de Cierre (Horizontal Bar)
 function renderReasonsChart(reasonsData) {
     const ctx = document.getElementById("reasonsChart").getContext("2d");
-    
+
     if (reasonsChartInstance) {
         reasonsChartInstance.destroy();
     }
-    
+
     // Agrupar los motivos
     const labels = reasonsData.map(item => item.reason);
     const counts = reasonsData.map(item => item.count);
-    
+
     reasonsChartInstance = new Chart(ctx, {
         type: 'bar',
+        plugins: [ChartDataLabels],
         data: {
             labels: labels,
             datasets: [{
@@ -1267,25 +1282,28 @@ function renderReasonsChart(reasonsData) {
             }]
         },
         options: {
+            indexAxis: 'y',
             responsive: true,
             maintainAspectRatio: false,
             plugins: {
                 legend: { display: false },
-                tooltip: { titleFont: { family: 'Outfit' }, bodyFont: { family: 'Outfit' } }
+                tooltip: { titleFont: { family: 'Outfit' }, bodyFont: { family: 'Outfit' } },
+                datalabels: {
+                    color: '#16233A',
+                    anchor: 'end',
+                    align: 'end',
+                    font: { family: 'Outfit', size: 11, weight: 'bold' },
+                    formatter: (value) => value > 0 ? value : ''
+                }
             },
             scales: {
                 x: {
-                    grid: { display: false },
-                    ticks: { 
-                        color: '#5B6577', 
-                        font: { family: 'Outfit', size: 11 },
-                        maxRotation: 45,
-                        minRotation: 45
-                    }
-                },
-                y: {
                     grid: { color: 'rgba(15, 23, 42, 0.05)' },
                     ticks: { color: '#5B6577', font: { family: 'Outfit' } }
+                },
+                y: {
+                    grid: { display: false },
+                    ticks: { color: '#5B6577', font: { family: 'Outfit', size: 11 } }
                 }
             }
         }
@@ -1558,6 +1576,28 @@ async function fetchBranchSlaReport() {
             `;
             tbody.appendChild(tr);
         });
+
+        // Fila de TOTAL al pie, sumando cada columna de todas las branches
+        const totals = data.reduce((acc, r) => {
+            acc.under_24h += r.under_24h;
+            acc.under_48h += r.under_48h;
+            acc.under_72h += r.under_72h;
+            acc.over_72h += r.over_72h;
+            acc.total_pending += r.total_pending;
+            return acc;
+        }, { under_24h: 0, under_48h: 0, under_72h: 0, over_72h: 0, total_pending: 0 });
+
+        const totalRow = document.createElement("tr");
+        totalRow.style.borderTop = "2px solid rgba(15, 23, 42, 0.15)";
+        totalRow.innerHTML = `
+            <td><strong>TOTAL</strong></td>
+            <td class="text-center" style="font-weight: bold;">${totals.under_24h}</td>
+            <td class="text-center" style="font-weight: bold;">${totals.under_48h}</td>
+            <td class="text-center" style="font-weight: bold;">${totals.under_72h}</td>
+            <td class="text-center" style="font-weight: bold;">${totals.over_72h}</td>
+            <td class="text-center" style="font-weight: bold; background: rgba(66, 133, 244, 0.14);">${totals.total_pending}</td>
+        `;
+        tbody.appendChild(totalRow);
     } catch (err) {
         tbody.innerHTML = `<tr><td colspan="6" class="text-center text-danger">Error: ${err.message}</td></tr>`;
     }
@@ -1632,8 +1672,16 @@ function populateTypificationMonthFilter() {
     updateTypificationMonthLabel();
 }
 
+const MONTH_LABELS_ES = ["Ene", "Feb", "Mar", "Abr", "May", "Jun", "Jul", "Ago", "Sep", "Oct", "Nov", "Dic"];
+function _formatMonthKey(monthKey) {
+    const [y, m] = monthKey.split("-");
+    const idx = parseInt(m, 10) - 1;
+    return `${MONTH_LABELS_ES[idx] || m} ${y}`;
+}
+
 async function fetchTypificationReport() {
     const tbody = document.getElementById("typification-table-body");
+    const headRow = document.getElementById("typification-table-head-row");
     if (!tbody) return;
     try {
         const months = getSelectedTypificationMonths();
@@ -1643,9 +1691,24 @@ async function fetchTypificationReport() {
 
         const response = await fetch(url);
         const data = await response.json();
+
+        // Meses presentes en los datos (unión de todos los motivos), ordenados. Se usan como
+        // columnas propias en la tabla para ver la evolución mes a mes de cada motivo.
+        const monthKeys = Array.from(new Set(data.flatMap(r => Object.keys(r.by_month || {})))).sort();
+        const colspan = 3 + monthKeys.length;
+
+        if (headRow) {
+            headRow.innerHTML = `
+                <th>Clasificación / Motivo</th>
+                ${monthKeys.map(mk => `<th class="text-center">${_formatMonthKey(mk)}</th>`).join("")}
+                <th class="text-center">Total Casos</th>
+                <th class="text-center">Pendientes</th>
+            `;
+        }
+
         tbody.innerHTML = "";
         if (data.length === 0) {
-            tbody.innerHTML = '<tr><td colspan="3" class="text-center">No hay motivos.</td></tr>';
+            tbody.innerHTML = `<tr><td colspan="${colspan}" class="text-center">No hay motivos.</td></tr>`;
             renderReasonsChart([]);
             return;
         }
@@ -1653,8 +1716,13 @@ async function fetchTypificationReport() {
             const tr = document.createElement("tr");
             tr.style.cursor = "pointer";
             tr.onclick = () => filterByReason(r.reason);
+            const monthCells = monthKeys.map(mk => {
+                const v = (r.by_month || {})[mk] || 0;
+                return `<td class="text-center">${v > 0 ? v : '<span style="opacity:0.4;">—</span>'}</td>`;
+            }).join("");
             tr.innerHTML = `
                 <td><span class="badge ${r.reason.includes('OLT') ? 'purple' : (r.reason.includes('Fibra') ? 'red' : 'orange')}">${r.reason}</span></td>
+                ${monthCells}
                 <td class="text-center"><strong>${r.total_wos}</strong></td>
                 <td class="text-center text-warning"><strong>${r.pending_wos}</strong></td>
             `;

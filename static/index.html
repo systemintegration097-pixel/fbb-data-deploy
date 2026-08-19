@@ -10,6 +10,8 @@
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
     <!-- Chart.js para visualización de gráficos -->
     <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+    <!-- Plugin para mostrar los valores numéricos directamente sobre los gráficos -->
+    <script src="https://cdn.jsdelivr.net/npm/chartjs-plugin-datalabels@2"></script>
     <!-- Leaflet.js Map CSS (módulo FBB DATA) -->
     <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" integrity="sha256-p4NxAoJBhIIN+hmNHrzRCf9tD/miZyoHS5obTRR9BMY=" crossorigin=""/>
     <link rel="stylesheet" href="style.css?v=10">
@@ -218,31 +220,21 @@
             <!-- Charts Section -->
             <section class="charts-section">
                 <div class="chart-container card">
-                    <h3>Distribución de SLA Pendiente</h3>
+                    <h3>Distribución de Averías Pendientes</h3>
                     <div class="chart-wrapper">
                         <canvas id="slaChart"></canvas>
                     </div>
                 </div>
                 
                 <div class="chart-container card">
-                    <h3>Top 5 Branches con Mayor Cantidad de Averías</h3>
+                    <h3>Averías Pendientes por Branch</h3>
                     <div class="chart-wrapper">
                         <canvas id="branchChart"></canvas>
                     </div>
                 </div>
 
                 <div class="chart-container card full-width">
-                    <div style="display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 10px;">
-                        <h3 style="margin: 0;">Tipificación por Motivo de Cierre</h3>
-                        <div class="month-multiselect" id="typification-month-picker">
-                            <button type="button" class="month-multiselect-toggle" id="typification-month-toggle">
-                                <i class="fa-regular fa-calendar"></i>
-                                <span id="typification-month-label">Todos los meses</span>
-                                <i class="fa-solid fa-chevron-down toggle-caret"></i>
-                            </button>
-                            <div class="month-multiselect-panel" id="typification-month-panel"></div>
-                        </div>
-                    </div>
+                    <h3 style="margin: 0;">Tipificación por Motivo de Cierre</h3>
                     <div class="chart-wrapper tall">
                         <canvas id="reasonsChart"></canvas>
                     </div>
@@ -254,7 +246,7 @@
                 <!-- SLA by Branch Card -->
                 <div class="table-section card">
                     <div class="table-header" style="border-bottom: 1px solid rgba(255, 255, 255, 0.05); padding-bottom: 10px; margin-bottom: 10px;">
-                        <h2 style="font-size: 1.1rem; font-weight: 600;"><i class="fa-solid fa-building-user" style="color: #4285F4; margin-right: 8px;"></i> SLA Pendiente por Sucursal (Branch)</h2>
+                        <h2 style="font-size: 1.1rem; font-weight: 600;"><i class="fa-solid fa-building-user" style="color: #4285F4; margin-right: 8px;"></i> Averías Pendientes por Sucursal (Branch)</h2>
                     </div>
                     <div class="table-responsive">
                         <table class="data-table small-table" style="font-size: 13px;">
@@ -277,13 +269,21 @@
 
                 <!-- Typification Close Reasons Card -->
                 <div class="table-section card">
-                    <div class="table-header" style="border-bottom: 1px solid rgba(255, 255, 255, 0.05); padding-bottom: 10px; margin-bottom: 10px;">
-                        <h2 style="font-size: 1.1rem; font-weight: 600;"><i class="fa-solid fa-tags" style="color: #AB47BC; margin-right: 8px;"></i> Resumen de Tipificación y Casos</h2>
+                    <div class="table-header" style="border-bottom: 1px solid rgba(255, 255, 255, 0.05); padding-bottom: 10px; margin-bottom: 10px; display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 10px;">
+                        <h2 style="font-size: 1.1rem; font-weight: 600; margin: 0;"><i class="fa-solid fa-tags" style="color: #AB47BC; margin-right: 8px;"></i> Resumen de Tipificación y Casos</h2>
+                        <div class="month-multiselect" id="typification-month-picker">
+                            <button type="button" class="month-multiselect-toggle" id="typification-month-toggle">
+                                <i class="fa-regular fa-calendar"></i>
+                                <span id="typification-month-label">Todos los meses</span>
+                                <i class="fa-solid fa-chevron-down toggle-caret"></i>
+                            </button>
+                            <div class="month-multiselect-panel" id="typification-month-panel"></div>
+                        </div>
                     </div>
                     <div class="table-responsive">
                         <table class="data-table small-table" style="font-size: 13px;">
                             <thead>
-                                <tr>
+                                <tr id="typification-table-head-row">
                                     <th>Clasificación / Motivo</th>
                                     <th class="text-center">Total Casos</th>
                                     <th class="text-center">Pendientes</th>
@@ -2670,7 +2670,7 @@
         </div>
     </div>
 
-    <script src="app.js?v=30"></script>
+    <script src="app.js?v=31"></script>
     <!-- Leaflet.js Map (módulo FBB DATA) -->
     <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js" integrity="sha256-20nQCchB9co0qIjJZRGuk2/Z9VM+kNiyxNV1lvTlZBo=" crossorigin=""></script>
     <script src="fbb-app.js?v=3"></script>
