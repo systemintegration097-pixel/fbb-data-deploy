@@ -1059,8 +1059,16 @@ async function loadBoxes() {
                 `;
                 
                 marker.bindPopup(popupContent, { className: 'dark-map-popup' });
-                
-                marker.on('click', () => {
+
+                // Los marcadores (interactivos en Leaflet) absorben el click antes de que
+                // llegue al mapa -si la regla de medir distancia está activa, ese click debe
+                // registrarse como punto de la regla, no abrir el popup ni seleccionar la caja.
+                marker.on('click', (e) => {
+                    if (isMeasuring) {
+                        marker.closePopup();
+                        handleMapMeasureClick(e);
+                        return;
+                    }
                     highlightTableRow(item.id);
                 });
                 
@@ -1491,6 +1499,14 @@ async function toggleKMLLayer() {
                             className: 'dark-map-popup'
                         });
                     }
+                    // Igual que con los marcadores: si la regla está activa, un click sobre
+                    // el polígono de cobertura debe medir, no abrir el popup del área.
+                    layer.on('click', (e) => {
+                        if (isMeasuring) {
+                            layer.closePopup();
+                            handleMapMeasureClick(e);
+                        }
+                    });
                 }
             }).addTo(AppState.map);
             
