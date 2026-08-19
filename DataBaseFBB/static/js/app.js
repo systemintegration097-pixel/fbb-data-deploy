@@ -1427,10 +1427,11 @@ function initLeafletMap() {
     
     AppState.map = L.map(mapContainer).setView([defaultLat, defaultLng], 6);
     
-    L.tileLayer('https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png', {
-        attribution: '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors &copy; <a href="https://carto.com/attributions">CARTO</a>',
-        subdomains: 'abcd',
-        maxZoom: 20
+    // CartoDB (basemaps.cartocdn.com) queda bloqueado por el proxy corporativo de esta red
+    // (403 Forbidden) -- se usa el basemap oscuro de Esri en su lugar, que sí es alcanzable.
+    L.tileLayer('https://server.arcgisonline.com/ArcGIS/rest/services/Canvas/World_Dark_Gray_Base/MapServer/tile/{z}/{y}/{x}', {
+        attribution: '&copy; <a href="https://www.esri.com">Esri</a>, HERE, Garmin, FAO, NOAA, USGS',
+        maxZoom: 16
     }).addTo(AppState.map);
     
     document.getElementById('reset-map-btn').addEventListener('click', () => {
