@@ -2435,6 +2435,25 @@ function _corteTypeLabel(tipoCorte) {
     return tipoCorte;
 }
 
+function _joinSpanishList(parts) {
+    if (parts.length <= 1) return parts.join("");
+    return parts.slice(0, -1).join(", ") + " y " + parts[parts.length - 1];
+}
+
+// Desglosa una lista de cortes por tipo, ej. "16 puertos con pérdida de potencia y 1 puerto
+// con corte de energía" -un mismo puerto puede tener un corte por LOS Y uno por energía a la
+// vez, así que un simple "N puertos con corte" (contando eventos) infla el total real de
+// puertos afectados; este desglose es siempre exacto porque cuenta cada tipo por separado.
+function _corteBreakdownLabel(cortesArr) {
+    const porTipo = {};
+    cortesArr.forEach(c => {
+        const label = _corteTypeLabel(c.tipo_corte);
+        porTipo[label] = (porTipo[label] || 0) + 1;
+    });
+    const partes = Object.entries(porTipo).map(([label, n]) => `${n} ${n === 1 ? "puerto" : "puertos"} con ${label.toLowerCase()}`);
+    return _joinSpanishList(partes);
+}
+
 let _oltCortesRaw = [];
 
 async function _loadOltCortes() {
@@ -2502,7 +2521,7 @@ function _renderOltCortes() {
                     </span>
                     <span style="font-weight:400;color:#9AA0A6;font-size:11px;"> (${g.olt_ip})</span>
                 </td>
-                <td colspan="2">${g.cortes.length} puerto${g.cortes.length > 1 ? "s" : ""} con corte</td>
+                <td colspan="2">${_corteBreakdownLabel(g.cortes)}</td>
                 <td></td>
                 <td class="text-center" style="font-size:1.1rem;color:#D93025;">${totalOnus}</td>
                 <td colspan="2"></td>
@@ -2738,20 +2757,7 @@ function _renderOltDetail() {
     if (d.cortes && d.cortes.length > 0) {
         if (cortesWrap) cortesWrap.style.display = "block";
 
-        // Un mismo puerto puede tener un corte por LOS Y uno por energía a la vez -contarlos
-        // como dos "puertos caídos" separados infla el total (ver caso real: 16 puertos con
-        // corte, uno de ellos con ambos problemas, listaba "17"). El total debe ser puertos
-        // DISTINTOS afectados; el desglose por tipo sí puede sumar más que eso.
-        if (cortesSummary) {
-            const distinctPorts = new Set(d.cortes.map(c => c.pon));
-            const porTipo = {};
-            d.cortes.forEach(c => {
-                const label = _corteTypeLabel(c.tipo_corte);
-                porTipo[label] = (porTipo[label] || 0) + 1;
-            });
-            const desglose = Object.entries(porTipo).map(([label, n]) => `${n} por ${label.toLowerCase()}`).join(" · ");
-            cortesSummary.textContent = `${distinctPorts.size} ${distinctPorts.size === 1 ? "puerto" : "puertos"} con corte (${desglose})`;
-        }
+        if (cortesSummary) cortesSummary.textContent = _corteBreakdownLabel(d.cortes);
 
         if (cortesList) {
             cortesList.innerHTML = d.cortes.map(c => `
