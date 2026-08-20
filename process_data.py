@@ -69,6 +69,24 @@ def get_branch_from_nims(unit_name, site_code):
 
     return ""
 
+KNOWN_BRANCHES = {"ARE", "CAJ", "CUS", "HUN", "JUN", "LAL", "LI1", "LI2", "LI3", "LI4", "LI7", "LI8", "PIU", "SAN"}
+
+def get_branch_from_responsible_unit(responsible_unit):
+    """Último fallback: GNOC ya manda el branch embebido en responsible_unit/cd_group con
+    el formato 'VTP_<BRANCH>BR FBB team' (o 'VTP_<BRANCH> FBB team' para ARE, sin 'BR') --
+    no depende de NIMS en absoluto, así que resuelve el branch aunque el cliente sea tan
+    nuevo que NIMS todavía no lo tenga (visto en producción: 9 WOs pendientes recientes sin
+    branch ni connector_code porque la cuenta no existía aún en nims_subscribers)."""
+    if not responsible_unit:
+        return ""
+    m = re.match(r'^VTP_([A-Z0-9]+?)\s+FBB\s*team$', responsible_unit.strip(), re.IGNORECASE)
+    if not m:
+        return ""
+    code = m.group(1).upper()
+    if code.endswith("BR"):
+        code = code[:-2]
+    return code if code in KNOWN_BRANCHES else ""
+
 def load_boxes_branch_map():
     """Carga {node_code: branch} desde la tabla 'boxes' del módulo FBB DATA (sincronizada
     desde la pestaña 'List of Boxes' del Google Sheet). Es la fuente de verdad para
@@ -646,6 +664,9 @@ def main():
             #     se busca esa caja en 'boxes' (List of Boxes) para sacar su branch.
             #  3. Si tampoco hay caja en ningún lado, o la caja no está en List of Boxes,
             #     se cae al heurístico de prefijos existente (unit_name/site_code de NIMS).
+            #  4. Último recurso, sin depender de NIMS: GNOC mismo manda el branch en
+            #     responsible_unit/cd_group ("VTP_LI4BR FBB team") -cubre cuentas tan nuevas
+            #     que NIMS aún no las tiene.
             box_code_for_branch = connector_code or nims_box_db or ""
             if not branch and box_code_for_branch:
                 branch = boxes_branch_map.get(box_code_for_branch.strip().upper(), "")
@@ -655,6 +676,9 @@ def main():
                 parsed_site_match = re.search(r'([A-Z]{2,4}\d{4,5})', ref_site)
                 parsed_site_code = parsed_site_match.group(1) if parsed_site_match else ""
                 branch = get_branch_from_nims(nims_unit_name_db, parsed_site_code)
+
+            if not branch:
+                branch = get_branch_from_responsible_unit(responsible_unit)
 
             # Priorizar NIMS para la topología del cliente
             raw_ref = nims_conn_db or nims_box_db or nims_site_db or connector_code or account or description or ""
