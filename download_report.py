@@ -379,7 +379,10 @@ async def run_flow():
         # --- PASO 3: Esperar Autorización y redirección a Dashboard ---
         print_log("Esperando a que la sesión se autorice en el Dashboard...")
         try:
-            await page.wait_for_url("**/dashboard", timeout=60000)
+            # 60s se quedaba corto de forma intermitente -en corridas reales se vio
+            # login exitoso llegar tarde por lentitud de red, no por credenciales
+            # (confirmado: otra corrida con las mismas credenciales sí pasó este punto).
+            await page.wait_for_url("**/dashboard", timeout=90000)
             print_log("¡Sesión autorizada en el Dashboard!")
             await asyncio.sleep(5)
         except Exception as e:

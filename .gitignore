@@ -6,6 +6,7 @@ google_service_account.json
 **/tu_archivo_de_credenciales.json
 **/*credenciales*.json
 **/*service_account*.json
+deploy ant/*.json
 nims_login_state.json
 deploy_pending_last_good.json
 

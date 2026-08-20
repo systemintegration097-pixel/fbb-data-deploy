@@ -812,10 +812,15 @@ def actualizar_google_sheets(archivos_descargados):
         logger.error(f"Error al actualizar 'WO Pendiente': {e}")
 
     # --- Actualizar "Reporte diario" (Columna E y preservar F-I) ---
+    # Desactivado a pedido del usuario: esta pestaña se deja tal cual está,
+    # no depende de ella ni el dashboard local ni el portal en Render (ambos
+    # leen solo "WO Pendiente", arriba). Además evita el polling de hasta
+    # 5 min esperando que Sheets calcule sus fórmulas.
+    ACTUALIZAR_REPORTE_DIARIO = False
     try:
         ws_reporte = sh.worksheet("Reporte diario")
-        
-        if df.shape[1] >= 4:
+
+        if ACTUALIZAR_REPORTE_DIARIO and df.shape[1] >= 4:
             # Extraer cuentas originales del Excel
             cuentas_raw = df.iloc[:, 3].astype(str).tolist()
             
@@ -1060,6 +1065,8 @@ def actualizar_google_sheets(archivos_descargados):
                 except Exception as e:
                     logger.warning(f"No se pudo copiar el formato a las columnas F e I: {e}")
                     
+        elif not ACTUALIZAR_REPORTE_DIARIO:
+            logger.info("Actualización de 'Reporte diario' desactivada (ACTUALIZAR_REPORTE_DIARIO=False) -- se omite.")
         else:
             logger.warning("El archivo Excel no tiene suficientes columnas para extraer la columna D.")
     except Exception as e:
