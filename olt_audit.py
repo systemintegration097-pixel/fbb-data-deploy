@@ -518,6 +518,40 @@ async def _run_async(df_olts: pd.DataFrame) -> list:
     return all_results
 
 
+async def _run_retry_async(failed_items: list) -> list:
+    """Segunda pasada al final del ciclo: reconsulta SOLO los (OLT, IP, PON) que
+    quedaron en TIMEOUT tras los 3 intentos normales de query_pon_async. La mayoría
+    de estos son blips transitorios de carga en el EMS (60 consultas SOAP concurrentes,
+    24/7) que se resuelven solos si se reconsultan un rato después, sin tener que
+    esperar al siguiente ciclo completo de miles de consultas."""
+    sem_global = asyncio.Semaphore(SEM_GLOBAL)
+    sems_olt = {}
+    for _, ip, _ in failed_items:
+        if ip not in sems_olt:
+            sems_olt[ip] = asyncio.Semaphore(SEM_PER_OLT)
+
+    connector = aiohttp.TCPConnector(
+        limit=SEM_GLOBAL + 20,
+        limit_per_host=6,
+        ttl_dns_cache=300,
+        enable_cleanup_closed=True,
+        keepalive_timeout=30,
+    )
+    results = []
+    async with aiohttp.ClientSession(connector=connector, headers=HEADERS) as session:
+        tasks = [
+            query_pon_async(session, sem_global, sems_olt[ip], olt_name, ip, pon)
+            for olt_name, ip, pon in failed_items
+        ]
+        gathered = await asyncio.gather(*tasks, return_exceptions=True)
+        for r in gathered:
+            if isinstance(r, Exception):
+                print(f"[OLT Audit] Excepción no capturada en reintento final: {r}")
+            elif isinstance(r, list):
+                results.extend(r)
+    return results
+
+
 # ─────────────────────────────────────────────────────────────────────────────
 #  FUNCIÓN PRINCIPAL (llamada desde server.py en un thread)
 # ─────────────────────────────────────────────────────────────────────────────
@@ -572,6 +606,37 @@ def run_audit(olts_input_path: str, selected_olts: list = None):
         if _cancel_flag:
             _set_status(state='idle', message='Escaneo cancelado por el usuario.', progress=0)
             return
+
+        # Segunda pasada: reintentar solo los puertos que quedaron en TIMEOUT (ver
+        # análisis del 2026-08-20 -0.065% de las consultas, esparcidas entre 37 OLTs,
+        # sin patrón por número de puerto -> blips transitorios de carga en el EMS,
+        # no equipos realmente caídos. Reconsultarlos ahora evita esperar el siguiente
+        # ciclo completo para que se resuelvan solos.
+        failed = [(r['OLT'], r['IP'], r['PON']) for r in all_records if r.get('Status_Req') == 'TIMEOUT']
+        if failed and not _cancel_flag:
+            _set_status(message=f'Reintentando {len(failed)} puertos que quedaron en timeout...')
+            retry_results = asyncio.run(_run_retry_async(failed))
+            retry_by_key = {}
+            for r in retry_results:
+                retry_by_key.setdefault((r['OLT'], r['IP'], r['PON']), []).append(r)
+
+            new_all_records = []
+            replaced_keys = set()
+            for r in all_records:
+                key = (r['OLT'], r['IP'], r['PON'])
+                if r.get('Status_Req') == 'TIMEOUT' and key in retry_by_key:
+                    if key not in replaced_keys:
+                        new_all_records.extend(retry_by_key[key])
+                        replaced_keys.add(key)
+                    continue
+                new_all_records.append(r)
+            all_records = new_all_records
+
+            n_resueltos = sum(
+                1 for rows in retry_by_key.values()
+                if rows and rows[0].get('Status_Req') != 'TIMEOUT'
+            )
+            print(f"[OLT Audit] Reintento final: {n_resueltos}/{len(failed)} puertos se resolvieron.", flush=True)
 
         _set_status(message='Detectando cortes masivos...')
         all_records, cortes = detect_cortes(all_records)
