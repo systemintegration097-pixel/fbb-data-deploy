@@ -28,7 +28,10 @@ BASE_PATH  = os.path.dirname(os.path.abspath(__file__))
 DB_FILE    = os.path.join(BASE_PATH, 'olt_auditoria.db')
 
 PON_RANGE       = range(1, 17)   # 1-1-3-1 … 1-1-3-16
-REQUEST_TIMEOUT = 30
+# 30s se quedaba corto para puertos con muchas ONUs -confirmado en vivo: PON con 63
+# ONUs (CAL0056OLT01, puerto 10) respondió bien en 47s, pero siempre caía en timeout
+# con el límite anterior. No es un puerto colgado, solo una respuesta más pesada.
+REQUEST_TIMEOUT = 60
 MAX_RETRIES     = 3
 RETRY_BACKOFF   = 2.0
 
