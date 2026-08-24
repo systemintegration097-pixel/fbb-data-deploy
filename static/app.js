@@ -155,6 +155,8 @@ async function saveCredentials(card) {
             card.querySelector(".cred-password-input").value = "";
             await fetchCredentials();
         }
+        const banner = document.getElementById("cred-sync-blocked-banner");
+        if (banner) banner.style.display = (!result.success && (result.message || "").includes("sincronización activa")) ? "flex" : "none";
     } catch (err) {
         feedback.textContent = "Error de conexión al guardar.";
         feedback.className = "cred-feedback error";
@@ -2944,6 +2946,32 @@ document.addEventListener("DOMContentLoaded", () => {
     });
     document.getElementById("kpi-period-select")?.addEventListener("change", _loadKpiData);
     document.getElementById("btn-kpi-refresh-reference")?.addEventListener("click", _refreshKpiReference);
+
+    // Cancelar sincronización desde la página de Credenciales (aparece solo cuando el
+    // guardado falla por haber un sync activo -Excel/GNOC/Tableau/NIMS bloquean el .env
+    // mientras corren, para no cambiar credenciales a mitad de un login en curso).
+    document.getElementById("btn-cancel-sync-for-creds")?.addEventListener("click", async (e) => {
+        const btn = e.currentTarget;
+        btn.disabled = true;
+        try {
+            const r = await fetch("/api/sync/cancel", { method: "POST" });
+            const result = await r.json();
+            const banner = document.getElementById("cred-sync-blocked-banner");
+            if (banner) {
+                banner.querySelector("span").textContent = result.message || "Sincronización cancelada. Ya puedes guardar tus credenciales.";
+                banner.style.background = "rgba(15,157,88,0.1)";
+                banner.style.borderColor = "rgba(15,157,88,0.3)";
+                banner.querySelector("span").style.color = "#0F9D58";
+                btn.style.display = "none";
+            }
+            if (typeof stopSyncTimer === "function") stopSyncTimer(false);
+            if (typeof resetSyncButton === "function") resetSyncButton();
+        } catch (err) {
+            console.error("Error al cancelar sincronización:", err);
+        } finally {
+            btn.disabled = false;
+        }
+    });
 
     // ── Página Reporte Diario ──────────────────────────────────
     document.getElementById("nav-daily-report")?.addEventListener("click", () => {

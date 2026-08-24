@@ -943,6 +943,10 @@
 
             <!-- ==================== PÁGINA: CREDENCIALES ==================== -->
             <div id="page-credentials" class="page-section">
+                <div id="cred-sync-blocked-banner" class="card" style="display:none; margin-bottom:16px; padding:14px 18px; align-items:center; justify-content:space-between; gap:12px; flex-wrap:wrap; background:rgba(217,48,37,0.08); border:1px solid rgba(217,48,37,0.3);">
+                    <span style="color:#D93025;"><i class="fa-solid fa-triangle-exclamation"></i> No se pueden guardar credenciales mientras hay una sincronización activa (Excel/GNOC/Tableau/NIMS).</span>
+                    <button id="btn-cancel-sync-for-creds" class="btn-sync" style="background:#D93025;"><i class="fa-solid fa-stop"></i> Cancelar sincronización</button>
+                </div>
                 <div class="cards-grid" style="grid-template-columns: repeat(auto-fit, minmax(340px, 1fr)); align-items: start;">
                     <div class="card cred-card" data-system="gnoc">
                         <h3><i class="fa-solid fa-server" style="color:#4285F4;margin-right:8px;"></i>GNOC</h3>
@@ -2671,7 +2675,7 @@
         </div>
     </div>
 
-    <script src="app.js?v=34"></script>
+    <script src="app.js?v=35"></script>
     <!-- Leaflet.js Map (módulo FBB DATA) -->
     <script src="https://cdn.jsdelivr.net/npm/leaflet@1.9.4/dist/leaflet.js" integrity="sha256-20nQCchB9co0qIjJZRGuk2/Z9VM+kNiyxNV1lvTlZBo=" crossorigin=""></script>
     <script src="fbb-app.js?v=5"></script>
