@@ -723,22 +723,24 @@ function pollSyncStatus() {
                 btnSync.querySelector("span").textContent = status.message || "Sincronizando...";
             } else if (status.state === "success") {
                 clearInterval(syncInterval);
+                syncInterval = null;
                 btnSync.querySelector("span").textContent = "Actualizando vista...";
-                
+
                 // Recargar datos y gráficos tras éxito
                 await fetchStats();
                 await fetchWorkOrders();
                 await fetchBranchSlaReport();
                 await fetchTypificationReport();
-                
+
                 // Detener el cronómetro al finalizar la actualización completa de la vista
                 stopSyncTimer(true);
                 resetSyncButton();
-                
+
                 const durationTxt = syncTimerText.textContent;
                 alert(`¡Sincronización completa en ${durationTxt}! La base de datos y gráficos se actualizaron correctamente.`);
             } else if (status.state === "error") {
                 clearInterval(syncInterval);
+                syncInterval = null;
                 stopSyncTimer(false);
                 resetSyncButton();
                 // Este alert() puede aparecer encima de CUALQUIER página del dashboard (sigue
@@ -747,6 +749,7 @@ function pollSyncStatus() {
                 alert("Sincronización de Excel (GNOC/Tableau/NIMS/CNOC) falló:\n\n" + status.message);
             } else if (status.state === "idle") {
                 clearInterval(syncInterval);
+                syncInterval = null;
                 resetSyncButton();
             }
         } catch (error) {
