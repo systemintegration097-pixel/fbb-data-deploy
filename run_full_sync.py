@@ -67,6 +67,12 @@ def main():
         print(f"===== [FullSync] Terminado con error en el push a Sheets — {datetime.now().isoformat(timespec='seconds')} =====", flush=True)
         sys.exit(1)
 
+    try:
+        errores = sheets_push.push_marlo_errors_to_sheet()
+        print(f"[FullSync] Push de errores de Marlo a ERRORES LVL3 OK ({errores} nuevos).", flush=True)
+    except Exception as e:
+        print(f"[FullSync] Push de errores de Marlo a ERRORES LVL3 falló: {e}", flush=True)
+
     print(f"===== [FullSync] Completado con éxito — {datetime.now().isoformat(timespec='seconds')} =====", flush=True)
 
 

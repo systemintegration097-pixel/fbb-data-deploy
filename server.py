@@ -4,6 +4,7 @@ import sqlite3
 import io
 import sys
 import time
+import json
 from datetime import datetime
 import openpyxl
 import urllib.request
@@ -125,6 +126,32 @@ def compute_filter_create_time_for_months(from_month, to_month):
     last_day = calendar.monthrange(end_first.year, end_first.month)[1]
     end_dt = end_first.replace(day=last_day, hour=23, minute=59, second=59)
     return f"{start_dt.strftime('%d/%m/%Y %H:%M:%S')} to {end_dt.strftime('%d/%m/%Y %H:%M:%S')}"
+
+# El rango de meses elegido en el dashboard solo vivía en el body del POST /api/sync (una
+# sola corrida) y en localStorage del navegador (solo cosmético, para que el selector no se
+# vea vacío) -- el ciclo automático (_auto_excel_sync_loop) nunca se enteraba y siempre volvía
+# a usar el FILTER_CREATE_TIME estático de .env. Este archivo persiste la última elección para
+# que tanto una sincronización manual como el ciclo automático usen el mismo rango hasta que
+# alguien lo cambie explícitamente.
+SYNC_MONTH_RANGE_PATH = os.path.join(os.path.dirname(os.path.abspath(__file__)), "sync_month_range.json")
+
+def save_sync_month_range(from_month, to_month):
+    with open(SYNC_MONTH_RANGE_PATH, "w", encoding="utf-8") as f:
+        json.dump({"from_month": from_month, "to_month": to_month}, f)
+
+def load_sync_month_range():
+    if not os.path.exists(SYNC_MONTH_RANGE_PATH):
+        return None, None
+    try:
+        with open(SYNC_MONTH_RANGE_PATH, "r", encoding="utf-8") as f:
+            data = json.load(f)
+        return data.get("from_month") or "", data.get("to_month") or ""
+    except (ValueError, OSError):
+        return None, None
+
+def clear_sync_month_range():
+    if os.path.exists(SYNC_MONTH_RANGE_PATH):
+        os.remove(SYNC_MONTH_RANGE_PATH)
 
 def run_background_sync(gnoc_env_overrides=None):
     global sync_status
@@ -1287,6 +1314,11 @@ def sync_data():
         if from_month > to_month:
             return jsonify({"success": False, "message": "El mes de inicio no puede ser posterior al mes de fin."})
         gnoc_env_overrides = {"FILTER_CREATE_TIME": filter_create_time}
+        save_sync_month_range(from_month, to_month)
+    else:
+        # "Automático" explícito (ambos selects vacíos): el ciclo automático debe volver a
+        # usar el FILTER_CREATE_TIME de .env en vez de seguir repitiendo el último rango elegido.
+        clear_sync_month_range()
 
     threading.Thread(target=run_background_sync, args=(gnoc_env_overrides,), daemon=True).start()
     return jsonify({"success": True, "message": "Sincronización iniciada en segundo plano."})
@@ -2585,8 +2617,13 @@ def _auto_excel_sync_loop():
             if ya_corriendo:
                 print("[AutoSync] Ya hay una sincronización en curso (probablemente manual) -- se omite este ciclo.", flush=True)
             else:
+                gnoc_env_overrides = None
+                from_month, to_month = load_sync_month_range()
+                if from_month and to_month:
+                    gnoc_env_overrides = {"FILTER_CREATE_TIME": compute_filter_create_time_for_months(from_month, to_month)}
+                    print(f"[AutoSync] Usando el último rango de meses elegido en el dashboard: {from_month} a {to_month}", flush=True)
                 print("[AutoSync] Iniciando sincronización automática de Excel...", flush=True)
-                run_background_sync()
+                run_background_sync(gnoc_env_overrides)
                 with sync_lock:
                     estado_final = dict(sync_status)
                 if estado_final["state"] == "success":
@@ -2596,6 +2633,11 @@ def _auto_excel_sync_loop():
                         print(f"[AutoSync] Push a Google Sheets OK ({filas} filas).", flush=True)
                     except Exception as e:
                         print(f"[AutoSync] Push a Google Sheets falló: {e}", flush=True)
+                    try:
+                        errores = sheets_push.push_marlo_errors_to_sheet()
+                        print(f"[AutoSync] Push de errores de Marlo a ERRORES LVL3 OK ({errores} nuevos).", flush=True)
+                    except Exception as e:
+                        print(f"[AutoSync] Push de errores de Marlo a ERRORES LVL3 falló: {e}", flush=True)
                     if cloud_sync.is_configured():
                         try:
                             payload = daily_report.build_cloud_payload()

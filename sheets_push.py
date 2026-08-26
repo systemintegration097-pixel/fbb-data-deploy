@@ -33,6 +33,8 @@ PASTE_END_COL = "U"
 # tanda anterior más larga sin tener que leer primero cuántas filas había.
 CLEAR_END_ROW = 5000
 
+ERRORS_TAB_NAME = "ERRORES LVL3"
+
 SERVICE_ACCOUNT_JSON = os.environ.get(
     "GOOGLE_SERVICE_ACCOUNT_JSON",
     os.path.join(BASE_PATH, "google_service_account.json")
@@ -95,5 +97,55 @@ def push_pending_valid_to_sheet():
     return len(rows)
 
 
+def fetch_marlo_error_rows():
+    conn = sqlite3.connect(DB_PATH, timeout=30)
+    cursor = conn.cursor()
+    cursor.execute("SELECT wo_code, ticket_code FROM work_orders WHERE is_error = 1")
+    rows = [(_clean(wo), _clean(tt)) for wo, tt in cursor.fetchall()]
+    conn.close()
+    return rows
+
+
+def push_marlo_errors_to_sheet():
+    """Agrega en la pestaña "ERRORES LVL3" (columnas A=WO_CODE, B=TT_CODE) las WOs marcadas
+    como error de la cuenta de Marlo (vtp_marlo.delacruz) que todavía no estén registradas
+    ahí. A diferencia de push_pending_valid_to_sheet(), esto NUNCA limpia el rango -- solo
+    agrega filas nuevas al final de lo que ya hay, para no perder el historial acumulado."""
+    if not os.path.exists(SERVICE_ACCOUNT_JSON):
+        raise FileNotFoundError(
+            f"No se encontró el archivo de credenciales de la cuenta de servicio "
+            f"'{SERVICE_ACCOUNT_JSON}'. Configura GOOGLE_SERVICE_ACCOUNT_JSON en .env o "
+            f"coloca el JSON con ese nombre en la raíz del proyecto."
+        )
+
+    db_rows = fetch_marlo_error_rows()
+
+    creds = Credentials.from_service_account_file(SERVICE_ACCOUNT_JSON, scopes=SCOPES)
+    gc = gspread.authorize(creds)
+    sh = gc.open_by_key(SPREADSHEET_ID)
+    ws = sh.worksheet(ERRORS_TAB_NAME)
+
+    existing_codes = set(ws.col_values(1))
+    seen = set()
+    new_rows = []
+    for wo_code, ticket_code in db_rows:
+        if wo_code and wo_code not in existing_codes and wo_code not in seen:
+            new_rows.append([wo_code, ticket_code])
+            seen.add(wo_code)
+
+    if not new_rows:
+        print("[Sheets] Sin errores nuevos de Marlo por agregar en ERRORES LVL3.", flush=True)
+        return 0
+
+    start_row = len(ws.col_values(1)) + 1
+    end_row = start_row + len(new_rows) - 1
+    paste_range = f"A{start_row}:B{end_row}"
+    ws.update(range_name=paste_range, values=new_rows, value_input_option="USER_ENTERED")
+    print(f"[Sheets] {len(new_rows)} errores nuevos de Marlo agregados en {paste_range}.", flush=True)
+
+    return len(new_rows)
+
+
 if __name__ == "__main__":
     push_pending_valid_to_sheet()
+    push_marlo_errors_to_sheet()
