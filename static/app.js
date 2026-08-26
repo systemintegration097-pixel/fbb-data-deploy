@@ -2395,17 +2395,19 @@ async function _searchOltClient(forcedQuery) {
 
         const os = d.olt_status;
         html += `
-            <div style="font-size:13px;color:#9AA0A6;margin-bottom:10px;">
-                OLT: <strong style="color:#E8EAED;">${os.olt_name}</strong> &middot;
-                PUERTO <strong style="color:#E8EAED;">${os.pon_num} de 16</strong> &middot;
-                IP: ${os.olt_ip} &middot; ${os.live ? `<strong style="color:#81C995;"><i class="fa-solid fa-bolt"></i> Consultado en vivo</strong>: ${os.ts_scan}` : `Último escaneo: ${os.ts_scan}`}
-            </div>
-            <div style="display:flex;gap:14px;font-size:12px;margin-bottom:14px;">
-                <span style="color:#81C995;">${os.ok} OK</span>
-                ${os.los > 0 ? `<span style="color:#F28B82;font-weight:600;">${os.los} LOS</span>` : ""}
-                ${os.energia > 0 ? `<span style="color:#FDD663;font-weight:600;">${os.energia} Energía</span>` : ""}
-                ${os.inactivo > 0 ? `<span style="color:#9AA0A6;">${os.inactivo} Inactivas</span>` : ""}
-                ${os.error > 0 ? `<span style="color:#CE93D8;">${os.error} Error</span>` : ""}
+            <div class="olt-pon-card" style="cursor:default;margin-bottom:14px;">
+                <div style="font-size:13px;color:#9AA0A6;margin-bottom:10px;">
+                    OLT: <strong style="color:#E8EAED;">${os.olt_name}</strong> &middot;
+                    PUERTO <strong style="color:#E8EAED;">${os.pon_num} de 16</strong> &middot;
+                    IP: ${os.olt_ip} &middot; ${os.live ? `<strong style="color:#81C995;"><i class="fa-solid fa-bolt"></i> Consultado en vivo</strong>: ${os.ts_scan}` : `Último escaneo: ${os.ts_scan}`}
+                </div>
+                <div style="display:flex;gap:14px;font-size:12px;">
+                    <span style="color:#81C995;">${os.ok} OK</span>
+                    ${os.los > 0 ? `<span style="color:#F28B82;font-weight:600;">${os.los} LOS</span>` : ""}
+                    ${os.energia > 0 ? `<span style="color:#FDD663;font-weight:600;">${os.energia} Energía</span>` : ""}
+                    ${os.inactivo > 0 ? `<span style="color:#9AA0A6;">${os.inactivo} Inactivas</span>` : ""}
+                    ${os.error > 0 ? `<span style="color:#CE93D8;">${os.error} Error</span>` : ""}
+                </div>
             </div>`;
 
         if (os.client_onu) {
