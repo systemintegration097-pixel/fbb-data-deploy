@@ -14,7 +14,10 @@ RESPONSIBLE_UNIT_WO, FT Reassigned, ISDN/Account, Warranty Days, Implementation 
 Act Status, Sub Status, Online Status, Ft Code, Staf Team, Connector_Code, COMPCONTENT.
 """
 import os
+import json
 import sqlite3
+import calendar
+from datetime import datetime, timedelta
 import gspread
 from google.oauth2.service_account import Credentials
 from dotenv import load_dotenv
@@ -34,6 +37,19 @@ PASTE_END_COL = "U"
 CLEAR_END_ROW = 5000
 
 ERRORS_TAB_NAME = "ERRORES LVL3"
+GNOCALL_TAB_NAME = "GNOCALL"
+GNOCALL_START_ROW = 2
+# Techo generoso propio de GNOCALL -la hoja ya tenía ~25000 filas de antes, muy por encima
+# del CLEAR_END_ROW de 5000 que usa "template realease lvl 3" (que sí cabe en ese tamaño).
+GNOCALL_CLEAR_END_ROW = 40000
+
+# Mismo archivo que persiste server.py (save_sync_month_range) con el rango de meses elegido
+# en el dashboard -se lee tal cual en vez de importar server.py para evitar un import
+# circular (server.py ya importa este módulo).
+SYNC_MONTH_RANGE_PATH = os.path.join(BASE_PATH, "sync_month_range.json")
+# Mismo default que GNOC_LOOKBACK_DAYS en download_report.py, para replicar la misma
+# ventana móvil cuando no se eligió un rango explícito ("Automático").
+GNOC_LOOKBACK_DAYS = int(os.environ.get("GNOC_LOOKBACK_DAYS", "60"))
 
 SERVICE_ACCOUNT_JSON = os.environ.get(
     "GOOGLE_SERVICE_ACCOUNT_JSON",
@@ -106,6 +122,102 @@ def fetch_marlo_error_rows():
     return rows
 
 
+def _format_create_time(value):
+    """create_time en la DB queda como 'YYYY-MM-DD HH:MM:SS' (ver process_data.py); la
+    pestaña GNOCALL ya viene con el formato 'DD/MM/YYYY HH:MM:SS' de GNOC, así que se
+    reconvierte para que las filas nuevas se vean igual que las que ya había."""
+    value = _clean(value)
+    if not value:
+        return ""
+    try:
+        return datetime.strptime(value, "%Y-%m-%d %H:%M:%S").strftime("%d/%m/%Y %H:%M:%S")
+    except ValueError:
+        return value
+
+
+def _get_synced_date_range():
+    """Replica la ventana de fechas que download_report.py acaba de usar para bajar GNOC:
+    el rango de meses elegido en el dashboard (persistido por server.py en
+    sync_month_range.json) si hay uno, o si no la misma ventana móvil de GNOC_LOOKBACK_DAYS
+    días que usa por defecto ("Automático")."""
+    if os.path.exists(SYNC_MONTH_RANGE_PATH):
+        try:
+            with open(SYNC_MONTH_RANGE_PATH, "r", encoding="utf-8") as f:
+                data = json.load(f)
+            from_month, to_month = data.get("from_month"), data.get("to_month")
+            if from_month and to_month:
+                start_dt = datetime.strptime(from_month, "%Y-%m")
+                end_first = datetime.strptime(to_month, "%Y-%m")
+                last_day = calendar.monthrange(end_first.year, end_first.month)[1]
+                end_dt = end_first.replace(day=last_day, hour=23, minute=59, second=59)
+                return start_dt, end_dt
+        except (ValueError, OSError):
+            pass
+    end_dt = datetime.now().replace(hour=23, minute=59, second=59)
+    start_dt = (datetime.now() - timedelta(days=GNOC_LOOKBACK_DAYS)).replace(hour=0, minute=0, second=0)
+    return start_dt, end_dt
+
+
+def fetch_wo_rows_in_range(start_dt, end_dt):
+    conn = sqlite3.connect(DB_PATH, timeout=30)
+    cursor = conn.cursor()
+    cursor.execute(
+        """
+        SELECT wo_code, create_time, account, ft_comment
+        FROM work_orders
+        WHERE create_time BETWEEN ? AND ?
+        ORDER BY create_time ASC
+        """,
+        (start_dt.strftime("%Y-%m-%d %H:%M:%S"), end_dt.strftime("%Y-%m-%d %H:%M:%S")),
+    )
+    rows = [
+        (_clean(wo_code), _format_create_time(create_time), _clean(account), _clean(ft_comment))
+        for wo_code, create_time, account, ft_comment in cursor.fetchall()
+    ]
+    conn.close()
+    return rows
+
+
+def push_gnocall_to_sheet():
+    """Reemplaza en la pestaña "GNOCALL" (A=WO code, B=Create Time, C=Subscribers, E=FT
+    comment) los datos del período de meses recién sincronizado -abiertas y cerradas por
+    igual, sin el filtro de is_error que sí aplica push_pending_valid_to_sheet(). A
+    diferencia de ERRORES LVL3, esto SÍ limpia el rango antes de escribir (igual que
+    push_pending_valid_to_sheet), porque cada sync debe reflejar exactamente el período
+    recién descargado, no ir acumulando duplicados. Nunca toca D ('Recurring in last 30
+    days') ni F ('Avería'), que se llenan aparte."""
+    if not os.path.exists(SERVICE_ACCOUNT_JSON):
+        raise FileNotFoundError(
+            f"No se encontró el archivo de credenciales de la cuenta de servicio "
+            f"'{SERVICE_ACCOUNT_JSON}'. Configura GOOGLE_SERVICE_ACCOUNT_JSON en .env o "
+            f"coloca el JSON con ese nombre en la raíz del proyecto."
+        )
+
+    start_dt, end_dt = _get_synced_date_range()
+    rows = fetch_wo_rows_in_range(start_dt, end_dt)
+    print(f"[Sheets] {len(rows)} WOs entre {start_dt} y {end_dt} a publicar en GNOCALL.", flush=True)
+
+    creds = Credentials.from_service_account_file(SERVICE_ACCOUNT_JSON, scopes=SCOPES)
+    gc = gspread.authorize(creds)
+    sh = gc.open_by_key(SPREADSHEET_ID)
+    ws = sh.worksheet(GNOCALL_TAB_NAME)
+
+    clear_range_abc = f"A{GNOCALL_START_ROW}:C{GNOCALL_CLEAR_END_ROW}"
+    clear_range_e = f"E{GNOCALL_START_ROW}:E{GNOCALL_CLEAR_END_ROW}"
+    ws.batch_clear([clear_range_abc, clear_range_e])
+    print(f"[Sheets] Rangos {clear_range_abc} y {clear_range_e} limpiados.", flush=True)
+
+    if rows:
+        abc_rows = [[r[0], r[1], r[2]] for r in rows]
+        e_rows = [[r[3]] for r in rows]
+        end_row = GNOCALL_START_ROW + len(rows) - 1
+        ws.update(range_name=f"A{GNOCALL_START_ROW}:C{end_row}", values=abc_rows, value_input_option="USER_ENTERED")
+        ws.update(range_name=f"E{GNOCALL_START_ROW}:E{end_row}", values=e_rows, value_input_option="USER_ENTERED")
+        print(f"[Sheets] {len(rows)} filas escritas en GNOCALL (filas {GNOCALL_START_ROW}-{end_row}).", flush=True)
+
+    return len(rows)
+
+
 def push_marlo_errors_to_sheet():
     """Agrega en la pestaña "ERRORES LVL3" (columnas A=WO_CODE, B=TT_CODE) las WOs marcadas
     como error de la cuenta de Marlo (vtp_marlo.delacruz) que todavía no estén registradas
@@ -149,3 +261,4 @@ def push_marlo_errors_to_sheet():
 if __name__ == "__main__":
     push_pending_valid_to_sheet()
     push_marlo_errors_to_sheet()
+    push_gnocall_to_sheet()

@@ -73,6 +73,12 @@ def main():
     except Exception as e:
         print(f"[FullSync] Push de errores de Marlo a ERRORES LVL3 falló: {e}", flush=True)
 
+    try:
+        nuevas_gnocall = sheets_push.push_gnocall_to_sheet()
+        print(f"[FullSync] Push a GNOCALL OK ({nuevas_gnocall} nuevas).", flush=True)
+    except Exception as e:
+        print(f"[FullSync] Push a GNOCALL falló: {e}", flush=True)
+
     print(f"===== [FullSync] Completado con éxito — {datetime.now().isoformat(timespec='seconds')} =====", flush=True)
 
 

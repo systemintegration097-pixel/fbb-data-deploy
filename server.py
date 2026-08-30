@@ -2638,6 +2638,11 @@ def _auto_excel_sync_loop():
                         print(f"[AutoSync] Push de errores de Marlo a ERRORES LVL3 OK ({errores} nuevos).", flush=True)
                     except Exception as e:
                         print(f"[AutoSync] Push de errores de Marlo a ERRORES LVL3 falló: {e}", flush=True)
+                    try:
+                        nuevas_gnocall = sheets_push.push_gnocall_to_sheet()
+                        print(f"[AutoSync] Push a GNOCALL OK ({nuevas_gnocall} nuevas).", flush=True)
+                    except Exception as e:
+                        print(f"[AutoSync] Push a GNOCALL falló: {e}", flush=True)
                     if cloud_sync.is_configured():
                         try:
                             payload = daily_report.build_cloud_payload()
