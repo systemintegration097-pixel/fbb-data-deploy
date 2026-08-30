@@ -780,7 +780,7 @@ def get_resumen_olts() -> list:
                 SUM(CASE WHEN tipo_falla='ERROR' THEN 1 ELSE 0 END) as error_pons
             FROM escaneos_latest
             GROUP BY olt_name, olt_ip
-            ORDER BY (los + energia) DESC, olt_name
+            ORDER BY los DESC, olt_name
         """).fetchall()
         result = [dict(r) for r in rows]
         conn.close()
