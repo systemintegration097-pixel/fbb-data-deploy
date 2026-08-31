@@ -37,13 +37,14 @@ def _load_deployments_df():
     import pandas as pd
     conn = _fbb_conn()
     df = pd.read_sql_query("""
-        SELECT branch, finish_date FROM deployments
+        SELECT branch, partner, finish_date FROM deployments
         WHERE finish_date IS NOT NULL AND finish_date != ''
     """, conn)
     conn.close()
     df["finish_date"] = pd.to_datetime(df["finish_date"], errors="coerce", dayfirst=True)
     df = df.dropna(subset=["finish_date"])
     df["branch"] = df["branch"].fillna("").str.strip()
+    df["partner"] = df["partner"].fillna("").str.strip()
     df["day_key"] = df["finish_date"].dt.strftime("%Y-%m-%d")
     df["month_key"] = df["finish_date"].dt.strftime("%Y-%m")
     # Misma convención lunes-domingo que kpi_calc, para que ambos reportes hablen
@@ -51,6 +52,25 @@ def _load_deployments_df():
     week_monday = df["finish_date"] - pd.to_timedelta(df["finish_date"].dt.weekday, unit="D")
     df["week_key"] = week_monday.dt.strftime("%Y-%m-%d")
     return df
+
+
+def compute_installs_by_partner(days_back=90):
+    """Instalaciones día a día por partner de los últimos `days_back` días (se manda ya
+    con suficiente historia para que el portal en la nube pueda filtrar cualquier rango
+    hasta ese tope sin pedir de nuevo al dashboard local -mismo criterio que
+    installs_by_month/installs_by_week, ver build_cloud_payload)."""
+    df = _load_deployments_df()
+    cutoff = (datetime.now() - timedelta(days=days_back)).strftime("%Y-%m-%d")
+    df_period = df[df["day_key"] >= cutoff]
+    partners = sorted(p for p in df_period["partner"].unique().tolist() if p)
+    by_day = []
+    for day in sorted(df_period["day_key"].unique().tolist()):
+        sub = df_period[df_period["day_key"] == day]
+        row = {"day": day, "total": int(len(sub))}
+        for p in partners:
+            row[p] = int((sub["partner"] == p).sum())
+        by_day.append(row)
+    return {"partners": partners, "days": by_day}
 
 
 def compute_installs_daily(month_key):
@@ -97,9 +117,24 @@ def get_installs_available_periods():
 # ─────────────────────────────────────────────────────────────────────────────
 
 def compute_pending_by_branch(since_month=PENDING_SINCE_MONTH):
+    """branch_table trae, por branch, el mismo desglose de horas pendientes que usa el
+    dashboard local (/api/reports/branch_sla en server.py): under_24h (0-24h), under_48h
+    (24-48h), under_72h (48-72h), over_72h (>72h) -"hours" ya viene calculada por
+    kpi_calc (tiempo transcurrido desde create_time para las que siguen Pending)."""
     wos = kpi_calc.get_enriched_wos()
     df = wos[(wos["month_key"] >= since_month) & (wos["kpi_closing"] == "Pending")]
-    branch_table = [{"branch": br, "qty_pending": int((df["branch"] == br).sum())} for br in kpi_calc.BRANCHES]
+    branch_table = []
+    for br in kpi_calc.BRANCHES:
+        sub = df[df["branch"] == br]
+        hours = sub["hours"]
+        branch_table.append({
+            "branch": br,
+            "qty_pending": int(len(sub)),
+            "under_24h": int(((hours > 0) & (hours <= 24)).sum()),
+            "under_48h": int(((hours > 24) & (hours <= 48)).sum()),
+            "under_72h": int(((hours > 48) & (hours <= 72)).sum()),
+            "over_72h": int((hours > 72).sum()),
+        })
     return {"branch_table": branch_table, "total_pending": int(len(df)), "since_month": since_month}
 
 
@@ -161,4 +196,5 @@ def build_cloud_payload():
         },
         "installs_by_month": installs_by_month,
         "installs_by_week": installs_by_week,
+        "installs_by_day_partner": compute_installs_by_partner(),
     }

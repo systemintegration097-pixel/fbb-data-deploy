@@ -50,6 +50,40 @@
       </div>
     </section>
 
+    {% if is_admin and stats_by_partner %}
+    <section class="report-card">
+      <div class="report-card-header">
+        <h2>Despliegues Pendientes por Partner</h2>
+      </div>
+      <div class="report-body" style="display:block;">
+        <table>
+          <thead>
+            <tr>
+              <th>Partner</th>
+              <th class="text-center">Under 24h</th>
+              <th class="text-center">Over 24h / 48h</th>
+              <th class="text-center">Over 72h</th>
+              <th class="text-center">Cerrar WO</th>
+              <th class="text-center" style="font-weight:700;">Total</th>
+            </tr>
+          </thead>
+          <tbody>
+            {% for p in stats_by_partner %}
+            <tr>
+              <td>{{ p.partner }}</td>
+              <td class="text-center stat-green">{{ p.under24 }}</td>
+              <td class="text-center stat-amber">{{ p.over2448 }}</td>
+              <td class="text-center stat-red">{{ p.over72 }}</td>
+              <td class="text-center stat-purple">{{ p.cerrar_wo }}</td>
+              <td class="text-center" style="font-weight:700;">{{ p.total }}</td>
+            </tr>
+            {% endfor %}
+          </tbody>
+        </table>
+      </div>
+    </section>
+    {% endif %}
+
     {% if is_admin %}
     <section class="report-card" id="daily-report-card">
       <div class="report-card-header">
@@ -80,9 +114,35 @@
 
           <h3 class="report-section-title">Averías Pendientes por Branch <span id="dr-pending-since" class="muted"></span></h3>
           <table style="margin-bottom:1.75rem;">
-            <thead><tr><th>Branch</th><th>Pendientes</th></tr></thead>
+            <thead>
+              <tr>
+                <th>Branch</th>
+                <th class="text-center">&lt; 24h</th>
+                <th class="text-center">24h - 48h</th>
+                <th class="text-center">48h - 72h</th>
+                <th class="text-center">&gt; 72h</th>
+                <th class="text-center" style="font-weight:700;">Total</th>
+              </tr>
+            </thead>
             <tbody id="dr-pending-table-body"></tbody>
           </table>
+
+          <div style="display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:10px;margin-bottom:1rem;">
+            <h3 class="report-section-title" style="margin:0;">Instalaciones por Partner</h3>
+            <div class="day-range-filter">
+              <label class="muted" style="font-size:0.8rem;" for="dr-partner-days">Últimos</label>
+              <input type="number" id="dr-partner-days" class="coord-input" value="7" min="1" max="90" step="1">
+              <label class="muted" style="font-size:0.8rem;">días</label>
+              <button type="button" class="btn-tool" id="btn-dr-partner-apply">Aplicar</button>
+            </div>
+          </div>
+          <div class="report-grid" style="margin-bottom:1.75rem;">
+            <table>
+              <thead><tr><th>Partner</th><th>Instalaciones</th></tr></thead>
+              <tbody id="dr-installs-partner-table-body"></tbody>
+            </table>
+            <div class="chart-box"><canvas id="drInstallsPartnerChart"></canvas></div>
+          </div>
 
           <h3 class="report-section-title">Cierres de Averías <span class="muted">(de acuerdo a GNOC)</span></h3>
           <div class="report-grid report-grid-3">
@@ -264,7 +324,7 @@
     let _drLoaded = false;
     let _drData = null;
     const _drState = { periodType: "monthly" };
-    let _drInstallsChart = null, _drClosuresMonthChart = null, _drClosuresWeekChart = null, _drClosuresDayChart = null;
+    let _drInstallsChart = null, _drClosuresMonthChart = null, _drClosuresWeekChart = null, _drClosuresDayChart = null, _drInstallsPartnerChart = null;
 
     document.getElementById("btn-toggle-daily-report").addEventListener("click", async () => {
       const body = document.getElementById("daily-report-body");
@@ -292,6 +352,7 @@
         _renderDrClosuresCharts(_drData.overview.closures_by_month, _drData.overview.closures_by_week, _drData.overview.closures_by_day);
         _populateDrPeriodSelect();
         _renderDrInstalls();
+        _renderDrInstallsPartner();
         _drLoaded = true;
         loadingEl.style.display = "none";
         contentEl.style.display = "block";
@@ -350,8 +411,48 @@
     function _renderDrPending(pending) {
       document.getElementById("dr-pending-since").textContent = `(desde ${pending.since_month})`;
       const tbody = document.getElementById("dr-pending-table-body");
-      tbody.innerHTML = pending.branch_table.map(b => `<tr><td>${_escHtml(b.branch)}</td><td>${b.qty_pending}</td></tr>`).join("") +
-        `<tr style="font-weight:700;"><td>TOTAL</td><td>${pending.total_pending}</td></tr>`;
+      const totals = pending.branch_table.reduce((acc, b) => {
+        acc.under_24h += b.under_24h; acc.under_48h += b.under_48h; acc.under_72h += b.under_72h; acc.over_72h += b.over_72h;
+        return acc;
+      }, { under_24h: 0, under_48h: 0, under_72h: 0, over_72h: 0 });
+      tbody.innerHTML = pending.branch_table.map(b => `
+        <tr>
+          <td>${_escHtml(b.branch)}</td>
+          <td class="text-center stat-green">${b.under_24h}</td>
+          <td class="text-center stat-amber">${b.under_48h}</td>
+          <td class="text-center" style="color:#ea580c;">${b.under_72h}</td>
+          <td class="text-center stat-red">${b.over_72h}</td>
+          <td class="text-center" style="font-weight:700;">${b.qty_pending}</td>
+        </tr>`).join("") +
+        `<tr style="font-weight:700;"><td>TOTAL</td><td class="text-center">${totals.under_24h}</td><td class="text-center">${totals.under_48h}</td><td class="text-center">${totals.under_72h}</td><td class="text-center">${totals.over_72h}</td><td class="text-center">${pending.total_pending}</td></tr>`;
+    }
+
+    function _renderDrInstallsPartner() {
+      const daysInput = document.getElementById("dr-partner-days");
+      const nDays = Math.max(1, parseInt(daysInput.value, 10) || 7);
+      const dataset = _drData.installs_by_day_partner || { partners: [], days: [] };
+      const cutoff = new Date();
+      cutoff.setDate(cutoff.getDate() - nDays);
+      const cutoffKey = cutoff.toISOString().slice(0, 10);
+      const daysInRange = dataset.days.filter(d => d.day >= cutoffKey);
+
+      const partnerTotals = dataset.partners
+        .map(p => ({ partner: p, qty: daysInRange.reduce((s, d) => s + (d[p] || 0), 0) }))
+        .filter(p => p.qty > 0)
+        .sort((a, b) => b.qty - a.qty);
+      const total = daysInRange.reduce((s, d) => s + d.total, 0);
+
+      const tbody = document.getElementById("dr-installs-partner-table-body");
+      tbody.innerHTML = (partnerTotals.length ? partnerTotals.map(p => `<tr><td>${_escHtml(p.partner)}</td><td>${p.qty}</td></tr>`).join("") : `<tr><td colspan="2" class="muted">Sin instalaciones en este rango.</td></tr>`) +
+        `<tr style="font-weight:700;"><td>TOTAL</td><td>${total}</td></tr>`;
+
+      const ctx = document.getElementById("drInstallsPartnerChart").getContext("2d");
+      if (_drInstallsPartnerChart) _drInstallsPartnerChart.destroy();
+      _drInstallsPartnerChart = new Chart(ctx, {
+        type: "bar",
+        data: { labels: partnerTotals.map(p => p.partner), datasets: [{ label: "Instalaciones", data: partnerTotals.map(p => p.qty), backgroundColor: "#7c3aed", borderRadius: 5 }] },
+        options: { responsive: true, maintainAspectRatio: false, indexAxis: "y", plugins: { legend: { display: false } } }
+      });
     }
 
     function _renderDrClosuresCharts(byMonth, byWeek, byDay) {
@@ -390,6 +491,8 @@
       });
     });
     document.getElementById("dr-period-select").addEventListener("change", _renderDrInstalls);
+    document.getElementById("btn-dr-partner-apply").addEventListener("click", _renderDrInstallsPartner);
+    document.getElementById("dr-partner-days").addEventListener("keydown", (e) => { if (e.key === "Enter") _renderDrInstallsPartner(); });
     {% endif %}
 
     // ---------------- Mapa de cobertura KML + puntos de venta ----------------

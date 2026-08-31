@@ -217,6 +217,26 @@ def compute_deploy_stats(clients):
     return {"total": total, "under24": under24, "over2448": over2448, "over72": over72, "cerrar_wo": cerrar_wo}
 
 
+def compute_deploy_stats_by_partner(clients):
+    """Mismo desglose que compute_deploy_stats() pero agrupado por partner en vez del
+    total general -para la tabla "Despliegues Pendientes por Partner" del Reporte Diario."""
+    by_partner = {}
+    for c in clients:
+        partner = (c.get("partner") or "Sin partner").strip() or "Sin partner"
+        row = by_partner.setdefault(partner, {"partner": partner, "total": 0, "under24": 0, "over2448": 0, "over72": 0, "cerrar_wo": 0})
+        row["total"] += 1
+        dtype = c.get("deployment_type")
+        if dtype == "Under 24h":
+            row["under24"] += 1
+        elif dtype in ("Over 24h", "Over 48h"):
+            row["over2448"] += 1
+        elif dtype == "Over 72h":
+            row["over72"] += 1
+        if (c.get("pending_days") or "").strip().lower() == "cerrar wo":
+            row["cerrar_wo"] += 1
+    return sorted(by_partner.values(), key=lambda r: r["total"], reverse=True)
+
+
 def get_client_by_account(account):
     conn = get_connection()
     try:

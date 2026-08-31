@@ -138,11 +138,13 @@ def create_app():
         branch = session["branch_code"]
         clients = db.get_active_clients_all() if is_admin else db.get_active_clients_by_branch(branch)
         stats = db.compute_deploy_stats(clients)
+        stats_by_partner = db.compute_deploy_stats_by_partner(clients) if is_admin else []
         return render_template(
             "dashboard.html",
             branch=branch,
             clients=clients,
             stats=stats,
+            stats_by_partner=stats_by_partner,
             is_admin=is_admin,
             last_deploy_run=db.get_meta("last_deploy_run"),
             checked_at=db.get_meta("checked_at"),

@@ -645,8 +645,17 @@ def import_to_sqlite():
                     col_mapping[c] = 'station_code'
                 elif 'mes' in c_lower and 'closed' in c_lower:
                     col_mapping[c] = 'month_year'
-                elif c_lower == 'finish date':
+                elif 'finish' in c_lower and 'date' in c_lower:
                     col_mapping[c] = 'finish_date'
+
+            if 'finish_date' not in col_mapping.values():
+                # No bloquea la importación (partner/branch siguen entrando bien), pero sin
+                # esto el Reporte Diario/"Instalaciones por Branch" se queda desactualizado
+                # en silencio con la última fecha buena -pasó justo por este motivo el
+                # 2026-08-31 (la columna origen pasó de "Finish Date" a "VTP Finish Date"
+                # y el match exacto de antes dejó de encontrarla).
+                print(f"ADVERTENCIA: no se encontró columna de 'finish date' en List_Deployed.csv -- "
+                      f"'Instalaciones por Branch/Partner' quedará desactualizado. Columnas disponibles: {list(df_dep.columns)}")
 
             if 'partner' in col_mapping.values() and 'branch' in col_mapping.values():
                 df_dep_filtered = df_dep[list(col_mapping.keys())].copy()

@@ -2643,6 +2643,17 @@ def _auto_excel_sync_loop():
                         print(f"[AutoSync] Push a GNOCALL OK ({nuevas_gnocall} nuevas).", flush=True)
                     except Exception as e:
                         print(f"[AutoSync] Push a GNOCALL falló: {e}", flush=True)
+                    # "Instalaciones por Branch"/"por Partner" del Reporte Diario leen de
+                    # DataBaseFBB/fbb_database.db (tabla deployments), que hasta ahora solo se
+                    # refrescaba con el botón manual "Sincronizar con Google Sheets" de FBB DATA
+                    # -sin este paso, el reporte se iba quedando desactualizado en silencio
+                    # (se vio el 2026-08-31: el gráfico se cortaba en el día 17 porque nadie
+                    # había vuelto a tocar ese botón desde entonces).
+                    try:
+                        fbb_importer.sync_data()
+                        print("[AutoSync] Sync de FBB DATA (deployments) OK.", flush=True)
+                    except Exception as e:
+                        print(f"[AutoSync] Sync de FBB DATA falló: {e}", flush=True)
                     if cloud_sync.is_configured():
                         try:
                             payload = daily_report.build_cloud_payload()
