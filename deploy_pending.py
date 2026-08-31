@@ -28,6 +28,13 @@ LAST_GOOD_FILE = os.path.join(BASE_PATH, "deploy_pending_last_good.json")
 SPREADSHEET_ID = "1Taraoyp9CDgZHzIDPNgoyDjkK2JQaCE9wi-_iuOvSJA"
 SCOPES_RO = ["https://www.googleapis.com/auth/spreadsheets.readonly"]
 
+# Último resultado conocido del push a la nube (ver _execute_run_in_background más abajo):
+# cloud_sync.push_clients() nunca lanza excepción, así que sin esto un push que falla en
+# silencio (ej. el proxy corporativo bloqueando onrender.com) se veía igual que uno exitoso
+# -ni en el log ni en el dashboard había ninguna señal. None = todavía no se intentó ningún
+# push en esta corrida del servidor.
+_last_cloud_push_error = None
+
 BRANCHES = ["ARE", "CAJ", "CUS", "HUN", "JUN", "LAL", "LI1", "LI2", "LI3", "LI4", "LI7", "PIU", "SAN"]
 DEPLOY_BUCKETS = ["Under 24h", "Over 24h", "Over 48h", "Over 72h"]
 
@@ -98,6 +105,7 @@ def get_summary():
         "clients": clients,
         "checked_at": datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
         "last_deploy_run": _get_last_success_time(),
+        "cloud_push_error": _last_cloud_push_error,
     }
 
 
@@ -198,7 +206,7 @@ RUN_TIMEOUT_SEC = 1800  # 30 min tope de seguridad (Selenium + espera de fórmul
 
 
 def _run_worker():
-    global _run_state, _run_proc
+    global _run_state, _run_proc, _last_cloud_push_error
     inicio = datetime.now()
     proc = None
     try:
@@ -265,20 +273,28 @@ def _run_worker():
                 # encargados de sucursal) porque el script SÍ logueó "éxito". Un total
                 # muy por debajo del último bueno es la señal más simple de detectarlo.
                 if last_good and resumen["total"] < last_good * 0.5:
-                    print(
-                        f"[deploy_pending] ALERTA: esta corrida trajo solo {resumen['total']} "
-                        f"clientes (la última buena tenía {last_good}) -- pinta a un export de "
-                        f"Tableau incompleto/incorrecto. Se omite el push a la nube para no pisar "
-                        f"datos buenos con datos sospechosos; revisar 'WO Pendiente' a mano."
+                    _last_cloud_push_error = (
+                        f"Se omitió el push: esta corrida trajo solo {resumen['total']} clientes "
+                        f"(la última buena tenía {last_good}), pinta a un export de Tableau incompleto."
                     )
-                else:
-                    cloud_sync.push_clients(
+                    print(f"[deploy_pending] ALERTA: {_last_cloud_push_error}")
+                elif cloud_sync.is_configured():
+                    push_result = cloud_sync.push_clients(
                         resumen["clients"],
                         last_deploy_run=resumen.get("last_deploy_run"),
                         checked_at=resumen.get("checked_at"),
                     )
                     _save_last_good_total(resumen["total"])
+                    # push_clients() nunca lanza excepción (ver cloud_sync.py) -- sin este
+                    # chequeo explícito del resultado, un push fallido (proxy bloqueado, nube
+                    # caída, etc.) quedaba completamente invisible tanto en el log como en
+                    # el dashboard, indistinguible de un push exitoso.
+                    _last_cloud_push_error = None if push_result.get("ok") else push_result.get("error", "error desconocido al subir a la nube")
+                else:
+                    _save_last_good_total(resumen["total"])
+                    _last_cloud_push_error = None
             except Exception as e:
+                _last_cloud_push_error = str(e)
                 print(f"[deploy_pending] No se pudo subir a la nube (no afecta el resultado local): {e}")
     except Exception as e:
         with _run_lock:

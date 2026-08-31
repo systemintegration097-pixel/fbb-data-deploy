@@ -3468,7 +3468,10 @@ async function _loadDeployPending() {
 
         _renderDeployPendingClients();
 
-        statusLine.innerHTML = `<i class="fa-regular fa-clock"></i> Última actualización de despliegues: <strong>${data.last_deploy_run || "sin registro"}</strong> &middot; datos leídos: ${data.checked_at}`;
+        const cloudWarning = data.cloud_push_error
+            ? ` <span style="color:#D93025;font-weight:600;" title="${_escapeHtml(data.cloud_push_error)}"><i class="fa-solid fa-triangle-exclamation"></i> El último push a la nube falló, el portal de sucursales puede estar desactualizado</span>`
+            : "";
+        statusLine.innerHTML = `<i class="fa-regular fa-clock"></i> Última actualización de despliegues: <strong>${data.last_deploy_run || "sin registro"}</strong> &middot; datos leídos: ${data.checked_at}${cloudWarning}`;
     } catch (err) {
         statusLine.innerHTML = `<span style="color:#D93025;"><i class="fa-solid fa-triangle-exclamation"></i> ${err.message}</span>`;
     }
