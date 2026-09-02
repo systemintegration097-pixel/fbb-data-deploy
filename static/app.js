@@ -1,3 +1,29 @@
+// Notificación no bloqueante (reemplaza alert() para avisos que no requieren
+// interacción del usuario, como el fin de una sincronización automática).
+// Nombre distinto a propósito: fbb-app.js ya define su propio showToast()
+// (global, para el módulo FBB DATA) y se carga después de este archivo, así
+// que un showToast() aquí quedaría tapado por el suyo.
+function showSyncToast(message, type = "success", duration = 6000) {
+    let container = document.getElementById("sync-toast-container");
+    if (!container) {
+        container = document.createElement("div");
+        container.id = "sync-toast-container";
+        document.body.appendChild(container);
+    }
+    const toast = document.createElement("div");
+    toast.className = `toast toast-${type}`;
+    const icon = type === "error" ? "⚠️" : "✅";
+    toast.innerHTML = `<span class="toast-icon">${icon}</span><span class="toast-msg"></span><button class="toast-close" aria-label="Cerrar">×</button>`;
+    toast.querySelector(".toast-msg").textContent = message;
+    const remove = () => {
+        toast.classList.add("toast-hide");
+        setTimeout(() => toast.remove(), 250);
+    };
+    toast.querySelector(".toast-close").addEventListener("click", remove);
+    container.appendChild(toast);
+    setTimeout(remove, duration);
+}
+
 // Variables Globales
 let workOrders = [];
 let filteredOrders = [];
@@ -737,7 +763,7 @@ function pollSyncStatus() {
                 resetSyncButton();
 
                 const durationTxt = syncTimerText.textContent;
-                alert(`¡Sincronización completa en ${durationTxt}! La base de datos y gráficos se actualizaron correctamente.`);
+                showSyncToast(`¡Sincronización completa en ${durationTxt}! La base de datos y gráficos se actualizaron correctamente.`, "success");
             } else if (status.state === "error") {
                 clearInterval(syncInterval);
                 syncInterval = null;
