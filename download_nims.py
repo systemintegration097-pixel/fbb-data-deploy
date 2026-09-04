@@ -21,7 +21,7 @@ DB_PATH = os.path.join(script_dir, "gnoc.db")
 TMS_LOGIN_URL = os.getenv("TMS_LOGIN_URL", "http://10.121.62.102:8080/backup/?target=error&err=denied")
 TMS_USER = os.getenv("TMS_USER")
 TMS_PASSWORD = os.getenv("TMS_PASSWORD")
-TMS_ZONE_VALUE = os.getenv("TMS_ZONE_VALUE", "10.121.62.167")  # "VTP" en el selector de Zone
+TMS_ZONE_LABEL = os.getenv("TMS_ZONE_LABEL", "VTP")  # nombre visible del Zone en el selector
 TMS_FILTER_ACCOUNT = os.getenv("TMS_FILTER_ACCOUNT", "gftth")
 
 # Portal NIMS (Bitel Passport - Quan ly thue bao > Bao cao thue bao bang rong co dinh) -
@@ -368,8 +368,11 @@ async def download_tms_file():
             await asyncio.sleep(3)
 
             await page.wait_for_selector("select[name='search[aaaserver]']", timeout=20000)
-            print_log(f"Configurando Zone={TMS_ZONE_VALUE!r} y Account={TMS_FILTER_ACCOUNT!r}...")
-            await page.select_option("select[name='search[aaaserver]']", TMS_ZONE_VALUE)
+            print_log(f"Configurando Zone={TMS_ZONE_LABEL!r} y Account={TMS_FILTER_ACCOUNT!r}...")
+            # Se selecciona por nombre visible (label), no por el IP interno (value) -el portal
+            # ya reasignó ese IP una vez (10.121.62.167 -> 10.121.41.177) y rompió la descarga
+            # en silencio durante más de una semana sin que nadie lo notara.
+            await page.select_option("select[name='search[aaaserver]']", label=TMS_ZONE_LABEL)
             await page.fill("input[name='search[accname]']", TMS_FILTER_ACCOUNT)
 
             print_log("Haciendo clic en 'Search'...")
