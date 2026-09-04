@@ -72,20 +72,25 @@ def get_branch_from_nims(unit_name, site_code):
 KNOWN_BRANCHES = {"ARE", "CAJ", "CUS", "HUN", "JUN", "LAL", "LI1", "LI2", "LI3", "LI4", "LI7", "LI8", "PIU", "SAN"}
 
 def get_branch_from_responsible_unit(responsible_unit):
-    """Último fallback: GNOC ya manda el branch embebido en responsible_unit/cd_group con
-    el formato 'VTP_<BRANCH>BR FBB team' (o 'VTP_<BRANCH> FBB team' para ARE, sin 'BR') --
-    no depende de NIMS en absoluto, así que resuelve el branch aunque el cliente sea tan
-    nuevo que NIMS todavía no lo tenga (visto en producción: 9 WOs pendientes recientes sin
-    branch ni connector_code porque la cuenta no existía aún en nims_subscribers)."""
+    """Último fallback: GNOC ya manda el branch embebido en responsible_unit/cd_group -no
+    depende de NIMS en absoluto, así que resuelve el branch aunque el cliente sea tan nuevo
+    que NIMS todavía no lo tenga (visto en producción: 9 WOs pendientes recientes sin branch
+    ni connector_code porque la cuenta no existía aún en nims_subscribers).
+    El formato varía según el equipo/team que lo genera en GNOC -visto en producción:
+    'VTP_LI4BR FBB team', 'VTP_PIU - Team CANCHAQUE', etc.- así que en vez de exigir un patrón
+    exacto completo, solo se toma el bloque alfanumérico pegado a 'VTP_'/'VTP-' y se valida
+    contra KNOWN_BRANCHES (con o sin el sufijo 'BR' de "branch")."""
     if not responsible_unit:
         return ""
-    m = re.match(r'^VTP_([A-Z0-9]+?)\s+FBB\s*team$', responsible_unit.strip(), re.IGNORECASE)
+    m = re.match(r'^VTP[_-]([A-Z0-9]+)', responsible_unit.strip(), re.IGNORECASE)
     if not m:
         return ""
     code = m.group(1).upper()
-    if code.endswith("BR"):
-        code = code[:-2]
-    return code if code in KNOWN_BRANCHES else ""
+    if code in KNOWN_BRANCHES:
+        return code
+    if code.endswith("BR") and code[:-2] in KNOWN_BRANCHES:
+        return code[:-2]
+    return ""
 
 def load_boxes_branch_map():
     """Carga {node_code: branch} desde la tabla 'boxes' del módulo FBB DATA (sincronizada
