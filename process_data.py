@@ -533,7 +533,14 @@ def main():
 
             if tab_info:
                 matched_tableau_count += 1
-                branch = tab_info.get("branch", "")
+                # Tableau a veces manda "FBB" (u otro valor genérico que no es ningún branch
+                # real) en vez de dejarlo vacío -si se acepta tal cual, bloquea la cascada de
+                # abajo (Caja -> NIMS/Site -> GNOC) porque branch ya "no está vacío". Se valida
+                # contra KNOWN_BRANCHES para que un valor basura no gane prioridad sobre Caja/Site,
+                # que sí resuelven el branch real (visto en WO_SPM_20260827_173274287: Tableau
+                # decía "FBB", la caja LIC0313-... correspondía a LI4).
+                branch_tableau = tab_info.get("branch", "")
+                branch = branch_tableau if branch_tableau in KNOWN_BRANCHES else ""
                 ticket_code = tab_info.get("ticket_code", "")
                 wo_create_date = tab_info.get("wo_create_date", create_time_str)
                 responsible_unit = tab_info.get("responsible_unit_wo", cd_group)
@@ -678,7 +685,11 @@ def main():
                 branch = get_branch_from_nims(nims_unit_name_db, parsed_site_code)
 
             if not branch:
-                branch = get_branch_from_responsible_unit(responsible_unit)
+                # responsible_unit puede venir de Tableau (tab_info.get("responsible_unit_wo"))
+                # con un texto genérico sin branch ("VTP - LIMA TGI FIXED BROADBAND/..."); cd_group
+                # es siempre el dato crudo de GNOC en el formato que este parser espera
+                # ("VTP_LI4BR FBB team"), así que se intenta también como alternativa.
+                branch = get_branch_from_responsible_unit(responsible_unit) or get_branch_from_responsible_unit(cd_group)
 
             # Priorizar NIMS para la topología del cliente
             raw_ref = nims_conn_db or nims_box_db or nims_site_db or connector_code or account or description or ""
