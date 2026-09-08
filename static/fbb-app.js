@@ -1439,7 +1439,12 @@ function initLeafletMap() {
     // (403 Forbidden) -- se usa el basemap oscuro de Esri en su lugar, que sí es alcanzable.
     L.tileLayer('https://server.arcgisonline.com/ArcGIS/rest/services/Canvas/World_Dark_Gray_Base/MapServer/tile/{z}/{y}/{x}', {
         attribution: '&copy; <a href="https://www.esri.com">Esri</a>, HERE, Garmin, FAO, NOAA, USGS',
-        maxZoom: 16
+        // Este basemap solo tiene tiles reales hasta z16 (maxNativeZoom); sin eso, Leaflet
+        // limitaba el zoom del mapa entero a 16. Con maxNativeZoom, Leaflet sigue permitiendo
+        // acercar hasta maxZoom ampliando (upscale) la última tile real en vez de pedir una
+        // que no existe.
+        maxZoom: 19,
+        maxNativeZoom: 16
     }).addTo(AppState.map);
     
     document.getElementById('reset-map-btn').addEventListener('click', () => {
