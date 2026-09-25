@@ -29,7 +29,20 @@ def download_csvs():
         )
         with urllib.request.urlopen(req) as response:
             csv_data = response.read()
-        
+            # Un proxy/red inestable puede cortar la conexión a la mitad sin que
+            # urlopen lance una excepción -response.read() simplemente devuelve lo que
+            # alcanzó a llegar. Si el servidor mandó Content-Length, se compara contra
+            # los bytes reales recibidos para detectar una descarga incompleta en vez
+            # de procesarla como si fuera el archivo completo (visto en producción:
+            # "List_Deployed" se cortaba siempre en el mismo punto, borrando meses
+            # recientes de 'deployments' en cada reintento).
+            expected_len = response.headers.get("Content-Length")
+            if expected_len is not None and len(csv_data) < int(expected_len):
+                raise Exception(
+                    f"Descarga incompleta de '{name}' ({len(csv_data)} de {expected_len} bytes "
+                    f"esperados) -probablemente un corte de red/proxy a mitad de la descarga."
+                )
+
         file_path = os.path.join(DATA_DIR, f"{name}.csv")
         with open(file_path, "wb") as f:
             f.write(csv_data)
@@ -631,6 +644,7 @@ def import_to_sqlite():
             
             # Map columns dynamically
             col_mapping = {}
+            finish_date_candidates = []
             for c in df_dep.columns:
                 c_lower = c.lower().strip()
                 if 'partner' in c_lower:
@@ -646,7 +660,17 @@ def import_to_sqlite():
                 elif 'mes' in c_lower and 'closed' in c_lower:
                     col_mapping[c] = 'month_year'
                 elif 'finish' in c_lower and 'date' in c_lower:
-                    col_mapping[c] = 'finish_date'
+                    # No mapear todavía -puede haber más de una columna que matchee (visto en
+                    # producción: "FINISH DATE" y "VTP Finish Date" coexistiendo). Mapear ambas
+                    # a 'finish_date' produce columnas duplicadas tras el rename, y
+                    # row.get('finish_date') deja de devolver un escalar. Se decide UNA sola
+                    # columna después de recorrer todas (se prefiere la que tenga "vtp" en el
+                    # nombre, que es la fuente vigente según el historial de este reporte).
+                    finish_date_candidates.append(c)
+
+            if finish_date_candidates:
+                preferred = next((c for c in finish_date_candidates if 'vtp' in c.lower()), finish_date_candidates[0])
+                col_mapping[preferred] = 'finish_date'
 
             if 'finish_date' not in col_mapping.values():
                 # No bloquea la importación (partner/branch siguen entrando bien), pero sin
@@ -660,10 +684,13 @@ def import_to_sqlite():
             if 'partner' in col_mapping.values() and 'branch' in col_mapping.values():
                 df_dep_filtered = df_dep[list(col_mapping.keys())].copy()
                 df_dep_filtered.rename(columns=col_mapping, inplace=True)
-                
-                # Delete existing deployments (except locally modified if any)
-                cursor.execute("DELETE FROM deployments WHERE locally_modified = 0")
-                
+
+                # Se arma la lista completa de filas a insertar ANTES de tocar la tabla -si el
+                # CSV llegó truncado o corrupto de alguna forma que no se detectó al descargar,
+                # el archivo igual se termina de leer/parsear acá (pandas no lanza error por un
+                # archivo incompleto, simplemente da menos filas), así que la única señal
+                # confiable es comparar el conteo final contra lo que ya había en la tabla.
+                new_rows = []
                 for _, row in df_dep_filtered.iterrows():
                     partner_val = str(row.get('partner')).strip()
                     branch_val = str(row.get('branch')).strip()
@@ -682,11 +709,28 @@ def import_to_sqlite():
                         except ValueError:
                             hours_val = None
 
-                    cursor.execute("""
+                    new_rows.append((partner_val, branch_val, kpi_val, hours_val, station_val, my_val, finish_val))
+
+                cursor.execute("SELECT COUNT(*) FROM deployments WHERE locally_modified = 0")
+                current_count = cursor.fetchone()[0]
+
+                # Umbral conservador: si el archivo nuevo trae menos de la mitad de las filas
+                # que ya había, es mucho más probable que sea una descarga incompleta/corrupta
+                # que una caída real de despliegues de un día para otro -se prefiere quedarse
+                # con los datos viejos (completos) antes que reemplazarlos por algo sospechoso
+                # (visto en producción: una descarga cortada a mitad de camino borró varios
+                # meses recientes de 'deployments' sin ningún error visible).
+                if current_count > 0 and len(new_rows) < current_count * 0.5:
+                    print(f"ADVERTENCIA: 'List_Deployed.csv' trajo solo {len(new_rows)} filas, muchas "
+                          f"menos que las {current_count} que ya había en 'deployments' -parece una "
+                          f"descarga incompleta/corrupta. Se conservan los datos anteriores sin tocar.")
+                else:
+                    cursor.execute("DELETE FROM deployments WHERE locally_modified = 0")
+                    cursor.executemany("""
                         INSERT INTO deployments (partner, branch, kpi_from_paid, close_time_hrs, station_code, month_year, finish_date, locally_modified)
                         VALUES (?, ?, ?, ?, ?, ?, ?, 0)
-                    """, (partner_val, branch_val, kpi_val, hours_val, station_val, my_val, finish_val))
-                    deployments_imported += 1
+                    """, new_rows)
+                    deployments_imported = len(new_rows)
             else:
                 # Se saltó TODA la importación en silencio la última vez que la hoja de
                 # origen renombró/quitó la columna "Partner" -sin este log, no había forma
