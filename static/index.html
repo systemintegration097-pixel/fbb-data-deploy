@@ -217,32 +217,29 @@
                 </div>
             </section>
 
-            <!-- Charts Section -->
-            <section class="charts-section">
-                <div class="chart-container card">
-                    <h3>Distribución de Averías Pendientes</h3>
-                    <div class="chart-wrapper">
-                        <canvas id="slaChart"></canvas>
-                    </div>
-                </div>
-                
-                <div class="chart-container card">
-                    <h3>Averías Pendientes por Branch</h3>
-                    <div class="chart-wrapper">
-                        <canvas id="branchChart"></canvas>
-                    </div>
-                </div>
-
-                <div class="chart-container card full-width">
-                    <h3 style="margin: 0;">Tipificación por Motivo de Cierre</h3>
-                    <div class="chart-wrapper tall">
-                        <canvas id="reasonsChart"></canvas>
-                    </div>
-                </div>
-            </section>
-
-            <!-- Reports Section (SLA by Branch and Typification) -->
+            <!-- Reports Section (SLA breakdown, SLA by Branch and Typification) -->
             <section class="charts-section mt-2" style="grid-template-columns: repeat(auto-fit, minmax(450px, 1fr)); margin-bottom: 20px;">
+                <!-- SLA Distribution Card (reemplaza a la dona slaChart) -->
+                <div class="table-section card">
+                    <div class="table-header" style="border-bottom: 1px solid rgba(255, 255, 255, 0.05); padding-bottom: 10px; margin-bottom: 10px;">
+                        <h2 style="font-size: 1.1rem; font-weight: 600;"><i class="fa-solid fa-chart-pie" style="color: #0F9D58; margin-right: 8px;"></i> Distribución de Averías Pendientes</h2>
+                    </div>
+                    <div class="table-responsive">
+                        <table class="data-table small-table" style="font-size: 13px;">
+                            <thead>
+                                <tr>
+                                    <th>Rango</th>
+                                    <th class="text-center">Cantidad</th>
+                                    <th class="text-center">%</th>
+                                </tr>
+                            </thead>
+                            <tbody id="sla-distribution-table-body">
+                                <tr><td colspan="3" class="text-center">Cargando...</td></tr>
+                            </tbody>
+                        </table>
+                    </div>
+                </div>
+
                 <!-- SLA by Branch Card -->
                 <div class="table-section card">
                     <div class="table-header" style="border-bottom: 1px solid rgba(255, 255, 255, 0.05); padding-bottom: 10px; margin-bottom: 10px;">
@@ -624,6 +621,9 @@
                     <button class="olt-tab" data-olt-tab="resumen">
                         <i class="fa-solid fa-chart-simple"></i> Resumen por OLT
                     </button>
+                    <button class="olt-tab" data-olt-tab="detalle">
+                        <i class="fa-solid fa-table-list"></i> Detalle por OLT
+                    </button>
                 </div>
 
                 <!-- Tab: Búsqueda de Cliente -->
@@ -640,6 +640,47 @@
 
                 <!-- Tab: Cortes Masivos (Caídas de Línea) -->
                 <div id="olt-tab-cortes" class="olt-tab-content card" style="display:none;">
+                    <!-- Ranking de caídas (LOS): top OLT / ODN Node / Hubbox + top 10 sites -->
+                    <h3 style="font-size:1rem;font-weight:600;margin:0 0 10px;">Ranking de Caídas (LOS)</h3>
+                    <div style="display:grid;grid-template-columns:repeat(auto-fit, minmax(220px, 1fr));gap:14px;margin-bottom:18px;">
+                        <div>
+                            <h4 style="font-size:0.85rem;font-weight:600;margin:0 0 8px;color:#5B6577;">Top OLT</h4>
+                            <table class="data-table small-table">
+                                <thead><tr><th>OLT</th><th class="text-center">LOS</th></tr></thead>
+                                <tbody id="olt-ranking-olt-body"><tr><td colspan="2" class="text-center">—</td></tr></tbody>
+                            </table>
+                        </div>
+                        <div>
+                            <h4 style="font-size:0.85rem;font-weight:600;margin:0 0 8px;color:#5B6577;">Top ODN Node</h4>
+                            <table class="data-table small-table">
+                                <thead><tr><th>ODN Node</th><th class="text-center">LOS</th></tr></thead>
+                                <tbody id="olt-ranking-odn-body"><tr><td colspan="2" class="text-center">—</td></tr></tbody>
+                            </table>
+                        </div>
+                        <div>
+                            <h4 style="font-size:0.85rem;font-weight:600;margin:0 0 8px;color:#5B6577;">Top Hubbox</h4>
+                            <table class="data-table small-table">
+                                <thead><tr><th>Hubbox</th><th class="text-center">LOS</th></tr></thead>
+                                <tbody id="olt-ranking-hubbox-body"><tr><td colspan="2" class="text-center">—</td></tr></tbody>
+                            </table>
+                        </div>
+                    </div>
+                    <div style="margin-bottom:22px;">
+                        <h4 style="font-size:0.85rem;font-weight:600;margin:0 0 8px;color:#5B6577;">Top 10 Sites por Clientes en LOS</h4>
+                        <div class="table-responsive">
+                            <table class="data-table small-table" id="olt-ranking-sites-table">
+                                <thead>
+                                    <tr>
+                                        <th>Site</th><th>Branch/Zona</th><th class="text-center">LOS</th>
+                                        <th class="text-center">Total ONT</th><th class="text-center">%</th>
+                                        <th class="text-center">LOS ≤7 días</th><th class="text-center">LOS &gt;7 días</th>
+                                    </tr>
+                                </thead>
+                                <tbody id="olt-ranking-sites-body"><tr><td colspan="7" class="text-center">—</td></tr></tbody>
+                            </table>
+                        </div>
+                    </div>
+
                     <div style="display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:10px;margin-bottom:14px;">
                         <h3 style="font-size:1rem;font-weight:600;margin:0;">Caídas de Línea (Cortes Masivos Detectados) — Agrupado por OLT</h3>
                         <div style="display:flex;gap:8px;flex-wrap:wrap;">
@@ -687,6 +728,32 @@
                             <tbody id="olt-resumen-body">
                                 <tr><td colspan="7" class="text-center" style="color:#9AA0A6;">Sin datos.</td></tr>
                             </tbody>
+                        </table>
+                    </div>
+                </div>
+
+                <!-- Tab: Detalle por OLT (cuenta, BRAS, diagnóstico, potencia, ticket, etc. por ONU) -->
+                <div id="olt-tab-detalle" class="olt-tab-content card" style="display:none;">
+                    <div style="display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:10px;margin-bottom:14px;">
+                        <h3 style="font-size:1rem;font-weight:600;margin:0;">Detalle de ONUs por OLT (consulta en vivo al EMS, incluye potencia óptica)</h3>
+                        <div style="display:flex;gap:8px;flex-wrap:wrap;align-items:center;">
+                            <select id="olt-detalle-select" class="filter-select-sm" style="min-width:220px;">
+                                <option value="">Selecciona una OLT...</option>
+                            </select>
+                            <button id="btn-olt-detalle-consultar" class="btn-sm-blue"><i class="fa-solid fa-magnifying-glass"></i> Consultar</button>
+                        </div>
+                    </div>
+                    <p id="olt-detalle-status" style="color:#9AA0A6;font-size:13px;">Elige una OLT y presiona "Consultar" — puede tardar unos segundos (se consulta cada ONU en vivo, incluida su potencia óptica).</p>
+                    <div class="table-responsive">
+                        <table class="data-table small-table" id="olt-detalle-table" style="display:none;">
+                            <thead>
+                                <tr>
+                                    <th>Account</th><th>BRAS</th><th>Diagnóstico</th><th>IP/MAC</th>
+                                    <th>Puerto</th><th>Branch/Zona</th><th>TMS</th><th>EMS</th>
+                                    <th>LastOffTime</th><th>Power (RX)</th><th>Teléfono</th><th>Ticket</th>
+                                </tr>
+                            </thead>
+                            <tbody id="olt-detalle-body"></tbody>
                         </table>
                     </div>
                 </div>

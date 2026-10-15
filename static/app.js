@@ -30,10 +30,6 @@ let filteredOrders = [];
 let currentPage = 1;
 const rowsPerPage = 10;
 
-// Variables de Gráficos (ChartJS instances)
-let slaChartInstance = null;
-let branchChartInstance = null;
-let reasonsChartInstance = null;
 
 // Elementos del DOM
 const btnSync = document.getElementById("btn-sync");
@@ -811,9 +807,8 @@ async function fetchStats() {
         }
         if (!_oltPageActive) _setHeaderLastUpdate("fa-regular fa-clock", "Última sincronización", _lastExcelSyncText);
 
-        // Generar gráficos
-        renderSlaChart(stats.pending_intervals);
-        renderBranchChart(stats.branch_distribution);
+        // Tabla de distribución SLA (reemplaza a la dona slaChart)
+        renderSlaDistributionTable(stats.pending_intervals, stats.total_valid);
 
         // Llenar selectores del filtro CD
         populateCdFilter(stats.cd_groups_distribution);
@@ -1195,150 +1190,23 @@ function closeModal() {
 // ================= RENDERIZAR GRÁFICOS (CHART.JS) =================
 
 // Gráfico 1: SLA Doughnut
-function renderSlaChart(intervals) {
-    const ctx = document.getElementById("slaChart").getContext("2d");
-    
-    if (slaChartInstance) {
-        slaChartInstance.destroy();
-    }
-    
-    slaChartInstance = new Chart(ctx, {
-        type: 'doughnut',
-        plugins: [ChartDataLabels],
-        data: {
-            labels: ['< 24 horas', '24 - 48 horas', '48 - 72 horas', '> 72 horas'],
-            datasets: [{
-                data: [
-                    intervals.under_24h,
-                    intervals.under_48h,
-                    intervals.under_72h,
-                    intervals.over_72h
-                ],
-                backgroundColor: ['#0F9D58', '#F4B400', '#FF6D01', '#DB4437'],
-                borderColor: '#10141D',
-                borderWidth: 2
-            }]
-        },
-        options: {
-            responsive: true,
-            maintainAspectRatio: false,
-            plugins: {
-                legend: {
-                    position: 'bottom',
-                    labels: { color: '#16233A', font: { family: 'Outfit', size: 12 } }
-                },
-                datalabels: {
-                    color: '#fff',
-                    font: { family: 'Outfit', size: 13, weight: 'bold' },
-                    formatter: (value) => value > 0 ? value : ''
-                }
-            }
-        }
-    });
-}
-
-// Gráfico 2: Top Branches con Mayor Cantidad de Averías (Horizontal Bar)
-function renderBranchChart(branchData) {
-    const ctx = document.getElementById("branchChart").getContext("2d");
-
-    if (branchChartInstance) {
-        branchChartInstance.destroy();
-    }
-
-    const labels = branchData.map(item => item.branch || "Sin branch");
-    const counts = branchData.map(item => item.count);
-
-    branchChartInstance = new Chart(ctx, {
-        type: 'bar',
-        plugins: [ChartDataLabels],
-        data: {
-            labels: labels,
-            datasets: [{
-                label: 'Averías Pendientes',
-                data: counts,
-                backgroundColor: '#1A73E8',
-                borderRadius: 5
-            }]
-        },
-        options: {
-            indexAxis: 'y',
-            responsive: true,
-            maintainAspectRatio: false,
-            plugins: {
-                legend: { display: false },
-                datalabels: {
-                    color: '#16233A',
-                    anchor: 'end',
-                    align: 'end',
-                    font: { family: 'Outfit', size: 11, weight: 'bold' },
-                    formatter: (value) => value > 0 ? value : ''
-                }
-            },
-            scales: {
-                x: {
-                    grid: { color: 'rgba(15, 23, 42, 0.05)' },
-                    ticks: { color: '#5B6577', font: { family: 'Outfit' } }
-                },
-                y: {
-                    grid: { display: false },
-                    ticks: { color: '#16233A', font: { family: 'Outfit', size: 12 } }
-                }
-            }
-        }
-    });
-}
-
-// Gráfico 3: Motivos de Cierre (Horizontal Bar)
-function renderReasonsChart(reasonsData) {
-    const ctx = document.getElementById("reasonsChart").getContext("2d");
-
-    if (reasonsChartInstance) {
-        reasonsChartInstance.destroy();
-    }
-
-    // Agrupar los motivos
-    const labels = reasonsData.map(item => item.reason);
-    const counts = reasonsData.map(item => item.count);
-
-    reasonsChartInstance = new Chart(ctx, {
-        type: 'bar',
-        plugins: [ChartDataLabels],
-        data: {
-            labels: labels,
-            datasets: [{
-                label: 'Órdenes por Motivo',
-                data: counts,
-                backgroundColor: ['#AB47BC', '#F4B400', '#FF6D01', '#1A73E8', '#0F9D58'],
-                borderRadius: 6
-            }]
-        },
-        options: {
-            indexAxis: 'y',
-            responsive: true,
-            maintainAspectRatio: false,
-            plugins: {
-                legend: { display: false },
-                tooltip: { titleFont: { family: 'Outfit' }, bodyFont: { family: 'Outfit' } },
-                datalabels: {
-                    color: '#16233A',
-                    anchor: 'end',
-                    align: 'end',
-                    font: { family: 'Outfit', size: 11, weight: 'bold' },
-                    formatter: (value) => value > 0 ? value : ''
-                }
-            },
-            scales: {
-                x: {
-                    grid: { color: 'rgba(15, 23, 42, 0.05)' },
-                    ticks: { color: '#5B6577', font: { family: 'Outfit' } }
-                },
-                y: {
-                    grid: { display: false },
-                    ticks: { color: '#5B6577', font: { family: 'Outfit', size: 11 } }
-                }
-            }
-        }
-    });
+// Tabla de distribución SLA (reemplaza a la dona slaChart). "Averías por Branch" y
+// "Tipificación" ya quedaron cubiertas por sus tablas existentes (branch-sla-table-body
+// y typification-table-body respectivamente), así que esos 2 gráficos se quitaron sin
+// necesidad de una tabla nueva -hubiera sido la misma info duplicada dos veces.
+function renderSlaDistributionTable(intervals, total) {
+    const tbody = document.getElementById("sla-distribution-table-body");
+    if (!tbody) return;
+    const buckets = [
+        { label: "< 24 horas", value: intervals.under_24h },
+        { label: "24 - 48 horas", value: intervals.under_48h },
+        { label: "48 - 72 horas", value: intervals.under_72h },
+        { label: "> 72 horas", value: intervals.over_72h },
+    ];
+    tbody.innerHTML = buckets.map(b => {
+        const pct = total > 0 ? ((b.value / total) * 100).toFixed(1) : "0.0";
+        return `<tr><td>${b.label}</td><td class="text-center">${b.value}</td><td class="text-center">${pct}%</td></tr>`;
+    }).join("");
 }
 
 // --- NIMS & TOPOLOGÍA DE RED ---
@@ -1634,10 +1502,6 @@ async function fetchBranchSlaReport() {
     }
 }
 
-// Motivos que no representan una tipificación real de avería (se excluyen del gráfico,
-// pero se siguen mostrando en la tabla de resumen)
-const NON_FAULT_REASONS = ["Pendiente (Sin comentario)", "Error (vtp_marlo.delacruz)", "PENDIENTE"];
-
 function getSelectedTypificationMonths() {
     const panel = document.getElementById("typification-month-panel");
     if (!panel) return [];
@@ -1740,7 +1604,6 @@ async function fetchTypificationReport() {
         tbody.innerHTML = "";
         if (data.length === 0) {
             tbody.innerHTML = `<tr><td colspan="${colspan}" class="text-center">No hay motivos.</td></tr>`;
-            renderReasonsChart([]);
             return;
         }
         data.forEach(r => {
@@ -1760,12 +1623,6 @@ async function fetchTypificationReport() {
             tbody.appendChild(tr);
         });
 
-        // El gráfico de "Tipificación por Motivo de Cierre" comparte el mismo filtro de mes,
-        // pero solo muestra motivos reales (excluye buckets de pendiente/error)
-        const chartData = data
-            .filter(r => !NON_FAULT_REASONS.includes(r.reason))
-            .map(r => ({ reason: r.reason, count: r.total_wos }));
-        renderReasonsChart(chartData);
     } catch (err) {
         tbody.innerHTML = `<tr><td colspan="4" class="text-center text-danger">Error: ${err.message}</td></tr>`;
     }
@@ -2136,13 +1993,15 @@ document.addEventListener("DOMContentLoaded", () => {
             const key = tab.dataset.oltTab;
             const panel = document.getElementById(`olt-tab-${key}`);
             if (panel) panel.style.display = "block";
-            if (key === "cortes")  _loadOltCortes();
+            if (key === "cortes")  { _loadOltCortes(); _loadLosRanking(); }
             if (key === "resumen") _loadOltResumen();
+            if (key === "detalle") _populateOltDetalleSelect();
         });
     });
 
     document.getElementById("olt-cortes-filter-branch")?.addEventListener("change", _renderOltCortes);
     document.getElementById("olt-cortes-filter-tipo")?.addEventListener("change", _renderOltCortes);
+    document.getElementById("btn-olt-detalle-consultar")?.addEventListener("click", _loadOltFullDetail);
 
     // ── Página Despliegues Pendientes ──────────────────────────
     document.getElementById("nav-deploy-pending")?.addEventListener("click", _loadDeployPending);
@@ -2615,6 +2474,123 @@ async function _loadOltResumen() {
         }).join("");
     } catch (e) {
         tbody.innerHTML = `<tr><td colspan="7" class="text-center" style="color:#D93025;padding:16px;"><i class="fa-solid fa-triangle-exclamation" style="margin-right:6px;"></i>No se pudo conectar con el servidor (${e.message}). <button class="btn btn-subtle btn-sm" onclick="_loadOltResumen()" style="margin-left:10px;padding:4px 10px;font-size:12px;"><i class="fa-solid fa-rotate-right"></i> Reintentar</button></td></tr>`;
+    }
+}
+
+// ── Ranking de Caídas (LOS): Top OLT / ODN Node / Hubbox + Top 10 Sites ───────
+async function _loadLosRanking() {
+    const olt = document.getElementById("olt-ranking-olt-body");
+    const odn = document.getElementById("olt-ranking-odn-body");
+    const hub = document.getElementById("olt-ranking-hubbox-body");
+    const sites = document.getElementById("olt-ranking-sites-body");
+    if (!olt) return;
+    [olt, odn, hub].forEach(tb => tb.innerHTML = '<tr><td colspan="2" class="text-center"><i class="fa-solid fa-spinner fa-spin"></i></td></tr>');
+    sites.innerHTML = '<tr><td colspan="7" class="text-center"><i class="fa-solid fa-spinner fa-spin"></i> Cargando...</td></tr>';
+    try {
+        const r = await fetch("/api/olt/los_ranking");
+        const data = await r.json();
+
+        const renderSimple = (tbody, rows) => {
+            if (!rows || !rows.length) {
+                tbody.innerHTML = '<tr><td colspan="2" class="text-center" style="color:#5B6577;">Sin LOS activos.</td></tr>';
+                return;
+            }
+            tbody.innerHTML = rows.map(r => `<tr><td>${r.name}</td><td class="text-center" style="color:#D93025;font-weight:600;">${r.count}</td></tr>`).join("");
+        };
+        renderSimple(olt, data.top_olt);
+        renderSimple(odn, data.top_odn);
+        renderSimple(hub, data.top_hubbox);
+
+        if (!data.top_sites || !data.top_sites.length) {
+            sites.innerHTML = '<tr><td colspan="7" class="text-center" style="color:#5B6577;">Sin datos.</td></tr>';
+        } else {
+            sites.innerHTML = data.top_sites.map(s => `<tr>
+                <td>${s.site}</td>
+                <td>${s.branch || "—"}</td>
+                <td class="text-center" style="color:#D93025;font-weight:600;">${s.los_count}</td>
+                <td class="text-center">${s.total_ont}</td>
+                <td class="text-center">${s.pct}%</td>
+                <td class="text-center">${s.los_leq_7d}</td>
+                <td class="text-center">${s.los_gt_7d}</td>
+            </tr>`).join("");
+        }
+    } catch (e) {
+        const errMsg = `<i class="fa-solid fa-triangle-exclamation"></i> Error: ${e.message}`;
+        [olt, odn, hub].forEach(tb => tb.innerHTML = `<tr><td colspan="2" class="text-center" style="color:#D93025;">${errMsg}</td></tr>`);
+        sites.innerHTML = `<tr><td colspan="7" class="text-center" style="color:#D93025;">${errMsg}</td></tr>`;
+    }
+}
+
+// ── Detalle por OLT: cuenta, BRAS, diagnóstico, potencia, ticket por ONU ──────
+let _oltDetalleSelectLoaded = false;
+
+async function _populateOltDetalleSelect() {
+    if (_oltDetalleSelectLoaded) return;
+    const sel = document.getElementById("olt-detalle-select");
+    if (!sel) return;
+    try {
+        const r = await fetch("/api/olt/list");
+        const olts = await r.json();
+        olts.forEach(o => {
+            const opt = document.createElement("option");
+            opt.value = o.name;
+            opt.textContent = `${o.name} (${o.ip})`;
+            sel.appendChild(opt);
+        });
+        _oltDetalleSelectLoaded = true;
+    } catch (e) {
+        console.error("Error cargando lista de OLTs:", e);
+    }
+}
+
+function _diagnosisBadgeClass(diag) {
+    if (diag === "OK") return "color:#0B7A44;";
+    if (diag === "LOS" || diag === "OPTICA") return "color:#D93025;font-weight:600;";
+    if (diag === "ENERGIA") return "color:#7A5900;";
+    return "color:#5B6577;";
+}
+
+async function _loadOltFullDetail() {
+    const sel = document.getElementById("olt-detalle-select");
+    const statusEl = document.getElementById("olt-detalle-status");
+    const table = document.getElementById("olt-detalle-table");
+    const tbody = document.getElementById("olt-detalle-body");
+    const oltName = sel?.value;
+    if (!oltName) {
+        statusEl.textContent = "Selecciona una OLT primero.";
+        return;
+    }
+    table.style.display = "none";
+    statusEl.innerHTML = `<i class="fa-solid fa-spinner fa-spin"></i> Consultando ${oltName} en vivo (estado + potencia óptica de cada ONU, puede tardar un momento)...`;
+    try {
+        const r = await fetch(`/api/olt/full_detail?olt_name=${encodeURIComponent(oltName)}`);
+        const data = await r.json();
+        if (data.error && (!data.rows || !data.rows.length)) {
+            statusEl.innerHTML = `<i class="fa-solid fa-triangle-exclamation" style="color:#D93025;"></i> ${data.error}`;
+            return;
+        }
+        if (!data.rows.length) {
+            statusEl.textContent = "Sin ONUs encontradas para esta OLT.";
+            return;
+        }
+        tbody.innerHTML = data.rows.map(row => `<tr>
+            <td>${row.account}</td>
+            <td style="font-family:monospace;font-size:11px;">${row.bras}</td>
+            <td style="${_diagnosisBadgeClass(row.diagnosis)}">${row.diagnosis}</td>
+            <td style="font-family:monospace;font-size:11px;">${row.ip_mac}</td>
+            <td style="font-family:monospace;font-size:11px;">${row.port}</td>
+            <td>${row.branch_zone}</td>
+            <td>${row.tms_status}</td>
+            <td>${row.ems_status}</td>
+            <td style="font-size:11px;">${row.last_off_time}</td>
+            <td>${row.power}</td>
+            <td>${row.phone}</td>
+            <td style="font-size:11px;">${row.ticket}</td>
+        </tr>`).join("");
+        table.style.display = "";
+        statusEl.textContent = `${data.rows.length} ONU(s) encontradas en ${oltName}.`;
+    } catch (e) {
+        statusEl.innerHTML = `<i class="fa-solid fa-triangle-exclamation" style="color:#D93025;"></i> Error: ${e.message}`;
     }
 }
 

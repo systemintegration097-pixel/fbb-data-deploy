@@ -1117,3 +1117,158 @@ def get_olt_port_status_live(olt_name: str, pon_port_num, onu_id: str = None) ->
     }
 
 
+# ─────────────────────────────────────────────────────────────────────────────
+#  POTENCIA ÓPTICA (RX/TX) — LST-OMDDM
+# ─────────────────────────────────────────────────────────────────────────────
+# Confirmado en vivo contra el EMS real (2026-10): LST-ONUSTATE (usado en todo lo
+# de arriba) NO trae potencia -hay que pedirla aparte, una llamada por ONU, con
+# otra operación. ONUIDTYPE=SN + ONUID=<serial, viene de AUTHINFO> es la única
+# combinación que el EMS acepta (se probó OLTID+PONID+ONUID plano, ONUID con el id
+# completo "rack-shelf-slot-pon-onu", y varios valores de ONUIDTYPE -todos
+# rechazados con "resource does not exist" o "input parameter error" antes de dar
+# con esta). Devuelve RxPower/TxPower/Temperature/Voltage reales (ej. -28.532 dBm).
+def build_soap_ddm(olt_ip: str, pon_id: str, onu_sn: str) -> bytes:
+    return (
+        '<?xml version="1.0" encoding="utf-8"?>'
+        '<soapenv:Envelope xmlns:soapenv="http://schemas.xmlsoap.org/soap/envelope/" '
+        'xmlns:nem="http://www.zte.com.cn/accessnetwork/ems/webservice/NeManagementService/">'
+        '<soapenv:Header><nem:Authentication>'
+        '<userName>ossbitel</userName><password>Ume1!2@3#</password>'
+        '</nem:Authentication></soapenv:Header>'
+        '<soapenv:Body><nem:OperationRequestInfo>'
+        '<operationName>LST-OMDDM</operationName>'
+        '<operatedObject>'
+        f'<param><name>OLTID</name><value>{olt_ip}</value></param>'
+        f'<param><name>PONID</name><value>{pon_id}</value></param>'
+        '<param><name>ONUIDTYPE</name><value>SN</value></param>'
+        f'<param><name>ONUID</name><value>{onu_sn}</value></param>'
+        '</operatedObject>'
+        '</nem:OperationRequestInfo></soapenv:Body></soapenv:Envelope>'
+    ).encode('utf-8')
+
+
+async def query_power_async(session, sem_global, sem_olt, olt_ip, pon_id, onu_sn) -> dict:
+    """Pide RxPower/TxPower/Temperature/Voltage de UN ONU. Nunca lanza -si el EMS no
+    responde o el ONU no tiene DDM (ej. offline hace rato), devuelve {} y el resto del
+    detalle de la OLT sigue sin verse afectado."""
+    if not onu_sn or onu_sn == '--':
+        return {}
+    try:
+        async with sem_global, sem_olt:
+            payload = build_soap_ddm(olt_ip, pon_id, onu_sn)
+            async with session.post(
+                EMS_URL, data=payload,
+                timeout=aiohttp.ClientTimeout(total=REQUEST_TIMEOUT)
+            ) as resp:
+                if resp.status != 200:
+                    return {}
+                xml_text = await resp.text()
+                records, status = parse_onus(xml_text)
+                if not records:
+                    return {}
+                rec = records[0]
+                return {
+                    "rx_power": rec.get("RxPower"),
+                    "rx_power_status": rec.get("RxPowerR"),
+                    "tx_power": rec.get("TxPower"),
+                    "temperature": rec.get("Temperature"),
+                    "voltage": rec.get("Voltage"),
+                }
+    except Exception:
+        return {}
+
+
+async def _get_olt_full_detail_async(olt_name: str, olt_ip: str) -> list:
+    """Recorre las 16 PON de una OLT (igual que _run_async, pero acotado a UNA sola
+    OLT) y, para cada ONU encontrada, pide también su potencia óptica. Mismo patrón de
+    concurrencia que el resto del módulo (sem_global/sem_olt), pero con límites propios
+    y más chicos -esto corre bajo demanda desde el dashboard (el usuario está esperando
+    la respuesta), no como parte del loop 24/7."""
+    sem_global = asyncio.Semaphore(16)
+    sem_olt = asyncio.Semaphore(4)
+    connector = aiohttp.TCPConnector(limit=20, limit_per_host=6)
+    async with aiohttp.ClientSession(connector=connector, headers=HEADERS) as session:
+        pon_tasks = [
+            query_pon_async(session, sem_global, sem_olt, olt_name, olt_ip, f"1-1-3-{p_num}")
+            for p_num in PON_RANGE
+        ]
+        pon_results = await asyncio.gather(*pon_tasks, return_exceptions=True)
+
+        onu_rows = []
+        for r in pon_results:
+            if isinstance(r, list):
+                onu_rows.extend(x for x in r if x.get('ONU_ID'))
+
+        power_tasks = [
+            query_power_async(session, sem_global, sem_olt, olt_ip, row['PON'], row['SN'])
+            for row in onu_rows
+        ]
+        power_results = await asyncio.gather(*power_tasks, return_exceptions=True)
+
+    for row, power in zip(onu_rows, power_results):
+        row['Power'] = power if isinstance(power, dict) else {}
+    return onu_rows
+
+
+def get_olt_full_detail(olt_name: str) -> list:
+    """Detalle EN VIVO de todas las ONUs de una OLT (estado + potencia óptica), para la
+    pestaña 'Detalle por OLT'. Resuelve el IP desde escaneos_latest (igual que
+    get_olt_port_status_live) para no depender de volver a leer olts_input.xlsx."""
+    if not olt_name:
+        return []
+    conn = get_olt_db_connection()
+    row = conn.execute(
+        "SELECT olt_ip FROM escaneos_latest WHERE olt_name = ? LIMIT 1", (olt_name,)
+    ).fetchone()
+    conn.close()
+    if not row:
+        return []
+    olt_ip = row['olt_ip']
+    try:
+        return asyncio.run(_get_olt_full_detail_async(olt_name, olt_ip))
+    except Exception as e:
+        print(f"[get_olt_full_detail error] {e}")
+        return []
+
+
+# ─────────────────────────────────────────────────────────────────────────────
+#  RANKING DE CAÍDAS (LOS) — para la pestaña "Caídas de Línea"
+# ─────────────────────────────────────────────────────────────────────────────
+def get_los_ranking_raw(top_n: int = 10) -> dict:
+    """Agrega escaneos_latest para los rankings de caídas. Solo agrupa por lo que YA
+    vive en olt_auditoria.db (olt_name) -el cruce a cuenta/box_code (necesario para
+    ODN Node y Hubbox, y para branch) requiere gnoc.db y lo hace server.py, que es
+    quien ya abre esa otra base. Acá se entregan las filas LOS crudas (olt_name, pon,
+    onu_id, dias_sin_servicio) más el top de OLTs (que no necesita ningún cruce) y el
+    total de ONUs por OLT (para el 'Total ONT' del ranking de sites)."""
+    conn = get_olt_db_connection()
+    try:
+        los_rows = conn.execute("""
+            SELECT olt_name, pon, onu_id, dias_sin_servicio
+            FROM escaneos_latest
+            WHERE tipo_falla IN ('LOS', 'OPTICA') AND es_activo = 1
+        """).fetchall()
+        totals = conn.execute("""
+            SELECT olt_name, COUNT(*) as total
+            FROM escaneos_latest
+            WHERE onu_id IS NOT NULL AND onu_id != ''
+            GROUP BY olt_name
+        """).fetchall()
+    finally:
+        conn.close()
+
+    los_by_olt = defaultdict(int)
+    for r in los_rows:
+        los_by_olt[r['olt_name']] += 1
+    top_olt = sorted(
+        ({"name": k, "count": v} for k, v in los_by_olt.items()),
+        key=lambda x: x['count'], reverse=True
+    )[:top_n]
+
+    return {
+        "los_rows": [dict(r) for r in los_rows],
+        "total_by_olt": {r['olt_name']: r['total'] for r in totals},
+        "top_olt": top_olt,
+    }
+
+

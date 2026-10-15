@@ -5,6 +5,7 @@ import io
 import sys
 import time
 import json
+from collections import defaultdict
 from datetime import datetime
 import openpyxl
 import urllib.request
@@ -1721,9 +1722,21 @@ def olt_fallas():
     return jsonify(rows)
 
 
+def _olt_site_code(olt_name):
+    """De 'ARE0005OLT01' -> 'ARE0005' (quita el sufijo OLTxx). Mismo criterio que ya
+    usaba /api/olt/cortes inline; factorizado para reusarlo en los endpoints nuevos de
+    detalle por OLT y ranking de caídas."""
+    import re
+    return re.sub(r'OLT\d+$', '', olt_name or "", flags=re.IGNORECASE).upper()
+
+
+def _load_zonas_map(cursor):
+    cursor.execute("SELECT site_code, branch FROM kpi_zonas_map")
+    return {r["site_code"].upper(): r["branch"] for r in cursor.fetchall()}
+
+
 @app.route("/api/olt/cortes")
 def olt_cortes():
-    import re
     rows = olt_audit.get_cortes()
 
     # Branch por OLT: se deriva el site_code quitando el sufijo "OLTxx" del nombre (ej.
@@ -1731,13 +1744,11 @@ def olt_cortes():
     # usa el Reporte KPI para resolver branch por site_code, ver kpi_calc.py).
     conn = get_db_connection()
     cursor = conn.cursor()
-    cursor.execute("SELECT site_code, branch FROM kpi_zonas_map")
-    zonas_map = {r["site_code"].upper(): r["branch"] for r in cursor.fetchall()}
+    zonas_map = _load_zonas_map(cursor)
     conn.close()
 
     for row in rows:
-        site_code = re.sub(r'OLT\d+$', '', row["olt_name"] or "", flags=re.IGNORECASE).upper()
-        row["branch"] = zonas_map.get(site_code, "")
+        row["branch"] = zonas_map.get(_olt_site_code(row["olt_name"]), "")
 
     return jsonify(rows)
 
@@ -1841,6 +1852,210 @@ def olt_client_search():
         if not olt_status:
             base["error"] = f"No hay datos de escaneo para {olt_name} puerto {puerto} todavía."
         return jsonify(base)
+    finally:
+        conn.close()
+
+
+def _format_tms_status(raw_status):
+    """Mismo mapeo que apply_status_rules() en download_nims.py (0->Activo, 2->Suspendido),
+    para que esta columna se lea igual que el resto del dashboard en vez del código crudo."""
+    if raw_status is None:
+        return "—"
+    s = str(raw_status).strip()
+    if s == "0":
+        return "Activo"
+    if s == "2":
+        return "Suspendido"
+    return f"Status {s}" if s else "—"
+
+
+def _format_power(power):
+    """{} o None -> '—'; dict con rx_power -> '-28.5 dBm (Normal)'."""
+    if not power or power.get("rx_power") in (None, "--"):
+        return "—"
+    rx = power["rx_power"]
+    status = power.get("rx_power_status") or ""
+    return f"{rx} dBm" + (f" ({status})" if status and status != "--" else "")
+
+
+# Pestaña "Detalle por OLT": tabla completa de ONUs de una OLT (cuenta, BRAS,
+# diagnóstico, IP/MAC, puerto, branch/zona, TMS, EMS, lastofftime, potencia, teléfono,
+# ticket). Reutiliza el mismo parseo de tm_subscribers.port que /api/olt/client_search
+# (L1768) pero al revés: en vez de partir de la cuenta para llegar al puerto, acá se
+# parte del puerto (que sí tenemos, viene del escaneo de la OLT) para llegar a la
+# cuenta -una sola consulta bulk a tm_subscribers por OLT, no una por ONU.
+@app.route("/api/olt/full_detail")
+def olt_full_detail():
+    olt_name = request.args.get("olt_name", "").strip()
+    if not olt_name:
+        return jsonify({"error": "Parámetro olt_name requerido."}), 400
+
+    onu_rows = olt_audit.get_olt_full_detail(olt_name)
+    if not onu_rows:
+        return jsonify({"olt_name": olt_name, "rows": [],
+                         "error": "No se encontraron ONUs (OLT desconocida o sin respuesta del EMS)."})
+
+    conn = get_db_connection()
+    cursor = conn.cursor()
+    try:
+        # tm_subscribers.port = "OLTNAME/.../PON_NUM/ONU_ID:extra" -se trae TODO lo de
+        # esta OLT de una vez y se indexa por (pon_num, onu_id) en Python, en vez de una
+        # consulta LIKE por cada ONU (puede haber cientos por OLT).
+        cursor.execute(
+            "SELECT username, port, mac, status, bras FROM tm_subscribers WHERE port LIKE ?",
+            (f"{olt_name}/%",)
+        )
+        tm_by_key = {}
+        for r in cursor.fetchall():
+            parts = (r["port"] or "").split("/")
+            if len(parts) < 4:
+                continue
+            pon_num = parts[-2]
+            onu_id = parts[-1].split(":")[0]
+            tm_by_key[(pon_num, onu_id)] = r
+
+        branch = _load_zonas_map(cursor).get(_olt_site_code(olt_name), "")
+
+        result_rows = []
+        for onu in onu_rows:
+            pon_num = (onu.get("PON") or "").split("-")[-1]
+            key = (pon_num, str(onu.get("ONU_ID") or ""))
+            tm_row = tm_by_key.get(key)
+
+            account = tm_row["username"] if tm_row else None
+            nims_row = None
+            ticket_row = None
+            if account:
+                cursor.execute("""
+                    SELECT customer_name, phone, address, box_code, connector_code, site_name
+                    FROM nims_subscribers WHERE account = ? COLLATE NOCASE LIMIT 1
+                """, (account,))
+                nims_row = cursor.fetchone()
+                cursor.execute("""
+                    SELECT ticket_code FROM work_orders
+                    WHERE account = ? COLLATE NOCASE
+                    ORDER BY create_time DESC LIMIT 1
+                """, (account,))
+                ticket_row = cursor.fetchone()
+
+            diag = onu.get("Tipo_Falla") or "—"
+            result_rows.append({
+                "account": account or "—",
+                "bras": tm_row["bras"] if tm_row else "—",
+                "diagnosis": diag,
+                "ip_mac": tm_row["mac"] if (tm_row and tm_row["mac"]) else "—",
+                "port": f"{olt_name}/{onu.get('PON')}/{onu.get('ONU_ID')}",
+                "branch_zone": f"{branch} / {nims_row['site_name']}" if (nims_row and nims_row["site_name"]) else (branch or "—"),
+                "tms_status": _format_tms_status(tm_row["status"] if tm_row else None),
+                "ems_status": onu.get("Estado") or "—",
+                "last_off_time": onu.get("FECHA_CAIDA") or "—",
+                "power": _format_power(onu.get("Power")),
+                "phone": (nims_row["phone"] if nims_row else None) or "—",
+                "ticket": (ticket_row["ticket_code"] if ticket_row else None) or "—",
+            })
+
+        return jsonify({"olt_name": olt_name, "rows": result_rows})
+    finally:
+        conn.close()
+
+
+# Ranking de caídas (pestaña "Caídas de Línea"): top OLT / ODN Node / Hubbox por
+# cantidad de ONUs en LOS, + top 10 sites con % y split ≤7d / >7d. olt_audit.py ya
+# entrega las filas LOS crudas (vive en olt_auditoria.db, sin acceso a cuentas); acá se
+# cruzan en bulk contra tm_subscribers/nims_subscribers (gnoc.db) para sacar el
+# box_code (= "ODN Node") de cada ONU en LOS.
+@app.route("/api/olt/los_ranking")
+def olt_los_ranking():
+    raw = olt_audit.get_los_ranking_raw()
+    los_rows = raw["los_rows"]
+    total_by_olt = raw["total_by_olt"]
+
+    conn = get_db_connection()
+    cursor = conn.cursor()
+    try:
+        olt_names = {r["olt_name"] for r in los_rows}
+        tm_by_key = {}
+        for olt_name in olt_names:
+            cursor.execute(
+                "SELECT username, port FROM tm_subscribers WHERE port LIKE ?",
+                (f"{olt_name}/%",)
+            )
+            for r in cursor.fetchall():
+                parts = (r["port"] or "").split("/")
+                if len(parts) < 4:
+                    continue
+                pon_num = parts[-2]
+                onu_id = parts[-1].split(":")[0]
+                tm_by_key[(olt_name, pon_num, onu_id)] = r["username"]
+
+        # Se trae TODO el mapeo account->box_code de una vez (en vez de un IN (...) con
+        # las cuentas en LOS) -con miles de cuentas afectadas a la vez, el IN rompe el
+        # límite de 999 variables de SQLite. Una sola consulta sin filtro es más barata
+        # que armar el chunking para evitarlo.
+        cursor.execute("SELECT account, box_code FROM nims_subscribers WHERE box_code IS NOT NULL AND box_code != ''")
+        box_by_account = {r["account"].lower(): r["box_code"] for r in cursor.fetchall() if r["account"]}
+
+        zonas_map = _load_zonas_map(cursor)
+
+        odn_counts, hubbox_counts = defaultdict(int), defaultdict(int)
+        site_los_7, site_los_more = defaultdict(int), defaultdict(int)
+
+        for row in los_rows:
+            olt_name = row["olt_name"]
+            pon_num = (row["pon"] or "").split("-")[-1]
+            account = tm_by_key.get((olt_name, pon_num, str(row["onu_id"])))
+            box_code = box_by_account.get((account or "").lower())
+            if box_code:
+                odn_counts[box_code] += 1
+                import re as _re
+                hubbox = _re.sub(r'-(SB|EB|EX)\d+$', '', box_code, flags=_re.IGNORECASE)
+                hubbox_counts[hubbox] += 1
+
+            site = _olt_site_code(olt_name)
+            dias = row["dias_sin_servicio"]
+            if dias is not None and dias <= 7:
+                site_los_7[site] += 1
+            else:
+                site_los_more[site] += 1
+
+        top_odn = sorted(
+            ({"name": k, "count": v} for k, v in odn_counts.items()),
+            key=lambda x: x["count"], reverse=True
+        )[:10]
+        top_hubbox = sorted(
+            ({"name": k, "count": v} for k, v in hubbox_counts.items()),
+            key=lambda x: x["count"], reverse=True
+        )[:10]
+
+        sites = set(site_los_7) | set(site_los_more)
+        site_totals = defaultdict(int)
+        for olt_name, total in total_by_olt.items():
+            site_totals[_olt_site_code(olt_name)] += total
+
+        top_sites = []
+        for site in sites:
+            los_7 = site_los_7.get(site, 0)
+            los_more = site_los_more.get(site, 0)
+            los_total = los_7 + los_more
+            total_ont = site_totals.get(site, 0)
+            top_sites.append({
+                "site": site,
+                "branch": zonas_map.get(site, ""),
+                "los_count": los_total,
+                "total_ont": total_ont,
+                "pct": round(los_total / total_ont * 100, 1) if total_ont else 0,
+                "los_leq_7d": los_7,
+                "los_gt_7d": los_more,
+            })
+        top_sites.sort(key=lambda x: x["los_count"], reverse=True)
+        top_sites = top_sites[:10]
+
+        return jsonify({
+            "top_olt": raw["top_olt"],
+            "top_odn": top_odn,
+            "top_hubbox": top_hubbox,
+            "top_sites": top_sites,
+        })
     finally:
         conn.close()
 
