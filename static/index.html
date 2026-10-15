@@ -31,7 +31,7 @@
             <nav class="nav-menu">
                 <a href="#" class="nav-item active" data-page="dashboard">
                     <i class="fa-solid fa-gauge"></i>
-                    <span>Averías pendientes</span>
+                    <span>Reporte General</span>
                 </a>
                 <a href="#" class="nav-item" data-page="deploy-pending" id="nav-deploy-pending">
                     <i class="fa-solid fa-screwdriver-wrench"></i>
@@ -122,7 +122,7 @@
             <!-- Header -->
             <header class="header">
                 <div class="header-title">
-                    <h1 id="page-title">Averías Pendientes — Avance SLA y Tipificación</h1>
+                    <h1 id="page-title">Reporte General — Avance SLA y Tipificación</h1>
                     <p id="page-subtitle">Monitoreo en tiempo real de órdenes de trabajo de GNOC desde Junio 2026</p>
                     <p id="last-sync-info" class="last-sync-info"><i class="fa-regular fa-clock"></i> Última sincronización: <span id="last-sync-value">Cargando...</span></p>
                 </div>
@@ -217,8 +217,11 @@
                 </div>
             </section>
 
-            <!-- Reports Section (SLA breakdown, SLA by Branch and Typification) -->
-            <section class="charts-section mt-2" style="grid-template-columns: repeat(auto-fit, minmax(450px, 1fr)); margin-bottom: 20px;">
+            <!-- Fila compacta: SLA Distribution + los 3 KPI de resolución -todas tarjetas
+                 chicas de alto similar (~330px), se acomodan en 4 columnas parejas en vez de
+                 quedar al lado de las tablas largas de abajo (eso se veía desbalanceado aunque
+                 ya no hubiera espacio en blanco). -->
+            <section class="charts-section mt-2" style="grid-template-columns: repeat(auto-fit, minmax(280px, 1fr)); margin-bottom: 20px; align-items: start;">
                 <!-- SLA Distribution Card (reemplaza a la dona slaChart) -->
                 <div class="table-section card">
                     <div class="table-header" style="border-bottom: 1px solid rgba(255, 255, 255, 0.05); padding-bottom: 10px; margin-bottom: 10px;">
@@ -240,6 +243,33 @@
                     </div>
                 </div>
 
+                <!-- KPI de tiempo de resolución (create_time -> closed_time) de WOs cerradas,
+                     por mes/semana/branch -distinto del SLA de la izquierda, que mide cuánto
+                     lleva PENDIENTE una avería activa. -->
+                <div class="chart-container card">
+                    <h3><i class="fa-solid fa-stopwatch" style="color: #0F9D58; margin-right: 6px;"></i> KPI: Resolución Mensual de Incidentes</h3>
+                    <div class="chart-wrapper">
+                        <canvas id="kpiResolutionMonthChart"></canvas>
+                    </div>
+                </div>
+                <div class="chart-container card">
+                    <h3><i class="fa-solid fa-building-user" style="color: #1A73E8; margin-right: 6px;"></i> KPI: WOs Cerradas por Branch</h3>
+                    <div class="chart-wrapper">
+                        <canvas id="kpiResolutionBranchChart"></canvas>
+                    </div>
+                </div>
+                <div class="chart-container card">
+                    <h3><i class="fa-solid fa-calendar-week" style="color: #AB47BC; margin-right: 6px;"></i> KPI: Resolución Semanal de Incidentes</h3>
+                    <div class="chart-wrapper">
+                        <canvas id="kpiResolutionWeekChart"></canvas>
+                    </div>
+                </div>
+            </section>
+
+            <!-- Fila de tablas largas: SLA por Branch + Tipificación -ambas crecen con la
+                 cantidad real de branches/motivos, por eso van separadas de la fila compacta
+                 de arriba en vez de forzarlas a un alto parejo con tarjetas chicas. -->
+            <section class="charts-section mt-2" style="grid-template-columns: repeat(auto-fit, minmax(450px, 1fr)); margin-bottom: 20px; align-items: start;">
                 <!-- SLA by Branch Card -->
                 <div class="table-section card">
                     <div class="table-header" style="border-bottom: 1px solid rgba(255, 255, 255, 0.05); padding-bottom: 10px; margin-bottom: 10px;">

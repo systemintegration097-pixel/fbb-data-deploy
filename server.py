@@ -2165,6 +2165,19 @@ def kpi_weekly_trend():
         return jsonify({"error": str(e)}), 500
 
 
+@app.route("/api/kpi/resolution_buckets")
+def kpi_resolution_buckets():
+    """KPI de tiempo de resolución (<6h/6-12h/12-24h/>24h) de WOs ya cerradas, agrupado
+    por mes, semana o branch -para las 3 tarjetas KPI del Reporte General."""
+    group_by = request.args.get("group_by", "month_key")
+    if group_by not in ("month_key", "week_key", "branch"):
+        return jsonify({"error": "group_by debe ser 'month_key', 'week_key' o 'branch'."}), 400
+    try:
+        return jsonify(_sanitize_for_json(kpi_calc.compute_resolution_buckets(group_by)))
+    except Exception as e:
+        return jsonify({"error": str(e)}), 500
+
+
 @app.route("/api/kpi/reference_status")
 def kpi_reference_status():
     try:

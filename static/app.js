@@ -63,6 +63,7 @@ async function initApp() {
 
     // Cargar datos iniciales
     fetchStats();
+    fetchResolutionKpis();
     fetchNimsReport();
     fetchBranchSlaReport();
     fetchTopologyAlarms();
@@ -104,7 +105,7 @@ function updateTimeBadge() {
 
 // Configurar los Listeners de Eventos
 const PAGE_TITLES = {
-    dashboard: ["Averías Pendientes — Avance SLA y Tipificación", "Monitoreo en tiempo real de órdenes de trabajo de GNOC desde Junio 2026"],
+    dashboard: ["Reporte General — Avance SLA y Tipificación", "Monitoreo en tiempo real de órdenes de trabajo de GNOC desde Junio 2026"],
     "deploy-pending": ["Despliegues Pendientes", "WO de instalación pendientes por branch — datos de deploy ant (Tableau Deploy WO Pending)"],
     orders: ["Órdenes de Trabajo", "Listado completo de work orders GNOC con filtros y exportación"],
     nims: ["Averías por Caja (NIMS)", "Reporte de órdenes agrupadas por topología de red (Sitio/XB/HB/Caja)"],
@@ -1207,6 +1208,66 @@ function renderSlaDistributionTable(intervals, total) {
         const pct = total > 0 ? ((b.value / total) * 100).toFixed(1) : "0.0";
         return `<tr><td>${b.label}</td><td class="text-center">${b.value}</td><td class="text-center">${pct}%</td></tr>`;
     }).join("");
+}
+
+// KPI de tiempo de resolución (create_time -> closed_time) de WOs ya cerradas, por mes/
+// semana/branch -distinto al SLA de arriba (que mide cuánto lleva PENDIENTE una avería
+// activa). Las 3 tarjetas comparten el mismo endpoint (solo cambia group_by) y se
+// grafican como barra apilada (un color por bucket de tiempo) -mismo patrón/tamaño
+// (.chart-wrapper, 240px) que el resto de gráficos de este dashboard.
+const RESOLUTION_BUCKET_DATASETS = [
+    { key: "<6h", label: "< 6h", backgroundColor: "#0F9D58" },
+    { key: "6-12h", label: "6-12h", backgroundColor: "#1A73E8" },
+    { key: "12-24h", label: "12-24h", backgroundColor: "#E06400" },
+    { key: ">24h", label: "> 24h", backgroundColor: "#D93025" },
+];
+let _kpiResolutionMonthChart = null, _kpiResolutionWeekChart = null, _kpiResolutionBranchChart = null;
+
+function _renderResolutionChart(canvasId, chartInstance, periods) {
+    const canvas = document.getElementById(canvasId);
+    if (!canvas) return chartInstance;
+    if (chartInstance) chartInstance.destroy();
+    if (!periods || !periods.length) return null;
+
+    const labels = periods.map(p => p.label);
+    return new Chart(canvas.getContext("2d"), {
+        type: "bar",
+        data: {
+            labels,
+            datasets: RESOLUTION_BUCKET_DATASETS.map(b => ({
+                label: b.label,
+                data: periods.map(p => p.buckets[b.key]),
+                backgroundColor: b.backgroundColor,
+            })),
+        },
+        options: {
+            responsive: true,
+            maintainAspectRatio: false,
+            plugins: { legend: { position: "bottom", labels: { boxWidth: 12, font: { size: 11 } } } },
+            scales: {
+                x: { stacked: true },
+                y: { stacked: true, ticks: { precision: 0 } },
+            },
+        },
+    });
+}
+
+async function fetchResolutionKpis() {
+    const groups = [
+        { group_by: "month_key", canvasId: "kpiResolutionMonthChart", set: (c) => _kpiResolutionMonthChart = c, get: () => _kpiResolutionMonthChart },
+        { group_by: "week_key", canvasId: "kpiResolutionWeekChart", set: (c) => _kpiResolutionWeekChart = c, get: () => _kpiResolutionWeekChart },
+        { group_by: "branch", canvasId: "kpiResolutionBranchChart", set: (c) => _kpiResolutionBranchChart = c, get: () => _kpiResolutionBranchChart },
+    ];
+    await Promise.all(groups.map(async (g) => {
+        try {
+            const r = await fetch(`/api/kpi/resolution_buckets?group_by=${g.group_by}`);
+            const data = await r.json();
+            if (data.error) throw new Error(data.error);
+            g.set(_renderResolutionChart(g.canvasId, g.get(), data.periods));
+        } catch (e) {
+            console.error(`Error cargando KPI de resolución (${g.group_by}):`, e);
+        }
+    }));
 }
 
 // --- NIMS & TOPOLOGÍA DE RED ---

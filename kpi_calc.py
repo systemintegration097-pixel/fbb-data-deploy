@@ -516,6 +516,62 @@ def get_enriched_wos():
     return _load_enriched_wos()
 
 
+RESOLUTION_BUCKETS = ["<6h", "6-12h", "12-24h", ">24h"]
+
+
+def compute_resolution_buckets(group_by="month_key", periods_limit=6):
+    """KPI de tiempo de RESOLUCIÓN (create_time -> closed_time) de WOs ya cerradas,
+    agrupado por mes, semana o branch -distinto al SLA de pendientes (que mide cuánto
+    lleva ABIERTA una avería activa). group_by: 'month_key', 'week_key' o 'branch'.
+    Para mes/semana se devuelven los últimos `periods_limit` períodos con datos (más
+    reciente al final); para branch se devuelven todos, ordenados por total desc."""
+    import pandas as pd
+
+    df = _load_enriched_wos()
+    closed = df[df["closed_time"].notna()].copy()
+    if closed.empty:
+        return {"group_by": group_by, "periods": []}
+
+    closed["bucket"] = pd.cut(
+        closed["hours"], bins=[-0.01, 6, 12, 24, float("inf")], labels=RESOLUTION_BUCKETS
+    )
+
+    key_col = group_by if group_by != "branch" else "branch"
+    if key_col == "branch":
+        closed = closed[closed["branch"] != ""]
+
+    grouped = closed.groupby([key_col, "bucket"], observed=True).size().unstack(fill_value=0)
+    for b in RESOLUTION_BUCKETS:
+        if b not in grouped.columns:
+            grouped[b] = 0
+    grouped["total"] = grouped[RESOLUTION_BUCKETS].sum(axis=1)
+
+    if group_by in ("month_key", "week_key"):
+        grouped = grouped.sort_index()
+        if periods_limit:
+            grouped = grouped.tail(periods_limit)
+    else:
+        grouped = grouped.sort_values("total", ascending=False)
+
+    periods = []
+    for key, row in grouped.iterrows():
+        if group_by == "month_key":
+            label = f"{MONTH_NAMES_ES[int(key[5:7]) - 1][:3].capitalize()} {key[:4]}"
+        elif group_by == "week_key":
+            monday = datetime.strptime(key, "%Y-%m-%d")
+            sunday = monday + timedelta(days=6)
+            label = f"{monday.strftime('%d/%m')}-{sunday.strftime('%d/%m')}"
+        else:
+            label = key
+        periods.append({
+            "key": key,
+            "label": label,
+            "buckets": {b: int(row[b]) for b in RESOLUTION_BUCKETS},
+            "total": int(row["total"]),
+        })
+    return {"group_by": group_by, "periods": periods}
+
+
 def get_reference_status():
     conn = _get_conn()
     cur = conn.cursor()
