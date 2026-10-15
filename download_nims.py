@@ -160,7 +160,11 @@ def import_nims():
             safe_str(row[16]), # phone
             'Active',          # status (por defecto Active, luego actualizado con TMs)
             safe_str(row[22]), # connection_date
-            safe_str(row[15])  # address
+            safe_str(row[15]), # address
+            safe_str(row[6]),  # port_device
+            safe_str(row[7]),  # port_logic
+            safe_str(row[10]), # port_splitter
+            safe_str(row[19])  # ont_serial
         ]
         data_rows.append(mapped_row)
         
@@ -177,8 +181,9 @@ def import_nims():
             stt, unit_name, unit_code, province, district,
             site_code, site_id, site_name, box_code, connector_code,
             account, contract_code, service_type, customer_name, phone,
-            status, connection_date, address
-        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+            status, connection_date, address,
+            port_device, port_logic, port_splitter, ont_serial
+        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
     """, data_rows)
     
     conn.commit()

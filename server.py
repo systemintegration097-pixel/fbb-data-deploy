@@ -689,7 +689,8 @@ def _check_bras_status_once(account, bras):
                 ip_status = "IP NOK"
 
             return estado, ip_status
-    except Exception:
+    except Exception as e:
+        print(f"[BRAS Check Error] Falló la consulta para cuenta='{account}' bras='{bras}': {type(e).__name__}: {e}", flush=True)
         return "UNKNOWN", "IP NOK"
 
 def _check_bras_status(account, bras):
@@ -797,9 +798,18 @@ def _prg_sync_cache():
 
         cur.execute("CREATE INDEX IF NOT EXISTS idx_prg_nims_box ON prg_nims(box_code)")
         cur.execute("CREATE INDEX IF NOT EXISTS idx_prg_nims_account ON prg_nims(account)")
-        cur.execute("INSERT OR REPLACE INTO metadata (key, value) VALUES ('mod_time', ?)", (str(_prg_file_mod_time()),))
+        file_mtime = _prg_file_mod_time()
+        cur.execute("INSERT OR REPLACE INTO metadata (key, value) VALUES ('mod_time', ?)", (str(file_mtime),))
+        cur.execute("SELECT COUNT(*) FROM prg_nims")
+        nims_count = cur.fetchone()[0]
+        cur.execute("SELECT COUNT(*) FROM prg_tms")
+        tms_count = cur.fetchone()[0]
         conn.commit()
         conn.close()
+        import datetime
+        mtime_str = datetime.datetime.fromtimestamp(file_mtime).strftime("%Y-%m-%d %H:%M:%S")
+        print(f"[PRG Cache] Resincronizado desde '{PORT_RELEASE_GUIDE_PATH}' (mtime {mtime_str}): "
+              f"{nims_count} filas Activo en prg_nims, {tms_count} filas en prg_tms.", flush=True)
     finally:
         wb.close()
 
@@ -865,8 +875,14 @@ def _execute_topology_scan(site_input, olt, hubbox):
             "customer_name": r["customer_name"] or "", "phone": r["phone"] or ""
         })
 
-    # Validar en un solo lote (respetando el límite de 2 workers concurrentes hacia BRAS),
-    # actualizando el contador de progreso a medida que cada cuenta se resuelve.
+    # Validar en un solo lote (mismo max_workers=2 que el loop de alarmas 24/7). Se
+    # probó subir a 8 pensando que "Sin datos" era saturación del CGI de BRAS por
+    # concurrencia, pero el log "[BRAS Check Error]" reveló que el CGI devuelve
+    # HTTP 403 Forbidden en el 100% de las consultas -incluso una sola, aislada, sin
+    # concurrencia- así que el problema real no es de concurrencia y subirla no ayuda;
+    # se vuelve a 2 para no arriesgar nada mientras se investiga por qué el CGI está
+    # rechazando todo (posible bloqueo de IP/firewall en 10.121.62.102, confirmar con
+    # el equipo de red).
     todas_las_cuentas = [(c["account"], c["bras"]) for pairs in accounts_by_box.values() for c in pairs]
     resultados_bras = {}
     with topology_scan_lock:
@@ -1735,6 +1751,32 @@ def _load_zonas_map(cursor):
     return {r["site_code"].upper(): r["branch"] for r in cursor.fetchall()}
 
 
+@app.route("/api/topology/branches")
+def topology_branches():
+    """Lista de branches para el 1er desglosable del Inspector de Topología, misma
+    fuente (kpi_zonas_map) que ya usa el Reporte KPI para branch por site_code."""
+    conn = get_db_connection()
+    cursor = conn.cursor()
+    cursor.execute("SELECT DISTINCT branch FROM kpi_zonas_map WHERE branch IS NOT NULL AND branch != '' ORDER BY branch")
+    branches = [r["branch"] for r in cursor.fetchall()]
+    conn.close()
+    return jsonify({"success": True, "branches": branches})
+
+
+@app.route("/api/topology/sites")
+def topology_sites():
+    """Sites de un branch dado, para el 2do desglosable (cascada desde el de branch)."""
+    branch = request.args.get("branch", "").strip()
+    if not branch:
+        return jsonify({"success": True, "sites": []})
+    conn = get_db_connection()
+    cursor = conn.cursor()
+    cursor.execute("SELECT site_code FROM kpi_zonas_map WHERE branch = ? ORDER BY site_code", (branch,))
+    sites = [r["site_code"] for r in cursor.fetchall()]
+    conn.close()
+    return jsonify({"success": True, "sites": sites})
+
+
 @app.route("/api/olt/cortes")
 def olt_cortes():
     rows = olt_audit.get_cortes()
@@ -1852,6 +1894,86 @@ def olt_client_search():
         if not olt_status:
             base["error"] = f"No hay datos de escaneo para {olt_name} puerto {puerto} todavía."
         return jsonify(base)
+    finally:
+        conn.close()
+
+
+@app.route("/api/ftth/search_by_box")
+def ftth_search_by_box():
+    """Sección 'Validación FTTH': Site + OLT + Caja -> clientes de esa caja con estado de
+    cuenta (Activo/Cancelado/Suspendido, ya calculado por apply_status_rules() en
+    download_nims.py), Online (consulta EMS en vivo, mismo patrón que /api/olt/client_search)
+    y el resto de datos NIMS/TMS pedidos por el usuario (Department, Device, Port
+    device/logic, Sub node code, Splitter, Serial ONT, Update time, Suspend date)."""
+    site = request.args.get("site", "").strip().upper()
+    olt = request.args.get("olt", "").strip()
+    box = request.args.get("box", "").strip().upper()
+    if not site or not olt or not box:
+        return jsonify({"success": False, "error": "Ingresa Site, OLT y Caja."}), 400
+
+    xb_code = f"XB0{olt}"
+    like_pattern = f"%{site}-{xb_code}-%{box}%"
+
+    conn = get_db_connection()
+    cursor = conn.cursor()
+    try:
+        cursor.execute("""
+            SELECT account, status, unit_name, site_name, box_code, connector_code,
+                   port_device, port_logic, port_splitter, ont_serial, connection_date
+            FROM nims_subscribers
+            WHERE UPPER(box_code) LIKE ?
+            ORDER BY account
+        """, (like_pattern,))
+        nims_rows = cursor.fetchall()
+
+        if not nims_rows:
+            return jsonify({"success": True, "clients": [], "count": 0})
+
+        accounts = [r["account"] for r in nims_rows]
+        placeholders = ",".join("?" * len(accounts))
+        cursor.execute(f"""
+            SELECT username, port, bras, suspenddate
+            FROM tm_subscribers WHERE username IN ({placeholders}) COLLATE NOCASE
+        """, accounts)
+        tm_by_account = {r["username"].strip().lower(): r for r in cursor.fetchall() if r["username"]}
+
+        clients = []
+        for r in nims_rows:
+            tm_row = tm_by_account.get((r["account"] or "").strip().lower())
+            online = "Desconocido"
+            if tm_row and tm_row["port"]:
+                parts = tm_row["port"].split("/")
+                if len(parts) >= 4:
+                    olt_name = parts[0]
+                    puerto = parts[-2]
+                    onu_id = parts[-1].split(":")[0]
+                    try:
+                        status_live = olt_audit.get_olt_port_status_live(olt_name, puerto, onu_id)
+                        if not status_live:
+                            status_live = olt_audit.get_olt_port_status(olt_name, puerto, onu_id)
+                        client_onu = status_live.get("client_onu") if status_live else None
+                        if client_onu:
+                            online = "Sí" if client_onu.get("tipo_falla") == "OK" else "No"
+                    except Exception as e:
+                        print(f"[FTTH Search Error] Consulta EMS falló para cuenta='{r['account']}': {e}", flush=True)
+
+            clients.append({
+                "account": r["account"],
+                "status": r["status"] or "—",
+                "online": online,
+                "department": r["unit_name"] or "—",
+                "device": r["site_name"] or "—",
+                "port_device": r["port_device"] or "—",
+                "port_logic": r["port_logic"] or "—",
+                "box_code": r["box_code"] or "—",
+                "connector_code": r["connector_code"] or "—",
+                "port_splitter": r["port_splitter"] or "—",
+                "ont_serial": r["ont_serial"] or "—",
+                "connection_date": r["connection_date"] or "—",
+                "suspend_date": (tm_row["suspenddate"] if tm_row and tm_row["suspenddate"] else "—")
+            })
+
+        return jsonify({"success": True, "clients": clients, "count": len(clients)})
     finally:
         conn.close()
 

@@ -69,6 +69,11 @@ async function initApp() {
     fetchTopologyAlarms();
     fetchAlarmScanStatus();
     _pollOltLoopStatus();
+    // Sin auto-refresh periódico a propósito: el cálculo cruza nims_subscribers
+    // completo (150k+ filas) y tarda ~15-20s -repetirlo cada minuto en la página que
+    // todos ven por defecto generaría ese parpadeo cada vez. Se recalcula al abrir
+    // el dashboard (recarga de página) o reingresando a la pestaña.
+    _loadLosRanking();
     setInterval(fetchTopologyAlarms, 60000);
     setInterval(fetchAlarmScanStatus, 60000);
     setInterval(_pollOltLoopStatus, 30000);
@@ -110,6 +115,7 @@ const PAGE_TITLES = {
     orders: ["Órdenes de Trabajo", "Listado completo de work orders GNOC con filtros y exportación"],
     nims: ["Averías por Caja (NIMS)", "Reporte de órdenes agrupadas por topología de red (Sitio/XB/HB/Caja)"],
     topology: ["Inspector de Topología", "Validación en vivo GPON + BRAS por Site/OLT/HUBBOX"],
+    ftth: ["Validación FTTH", "Búsqueda de clientes por Site + OLT + Caja: estado de cuenta, Online (EMS) y datos NIMS/TMS"],
     olt: ["Auditoría OLT", "Estado de ONUs, puertos caídos y cortes masivos detectados en tiempo real"],
     kpi: ["Reporte KPI", "WO Incident Report — calculado en vivo desde las WOs de GNOC ya descargadas"],
     "daily-report": ["Reporte Diario", "Instalaciones diarias/semanales, averías pendientes y cierres por branch — GNOC + FBB DATA"],
@@ -526,6 +532,166 @@ function setupEventListeners() {
                 scanTopologyLive();
             }
         });
+    }
+
+    // Desglosables en cascada Branch -> Site, y filtro de texto libre sobre la grilla
+    // ya dibujada (los 3 trabajan juntos: branch/site deciden QUÉ se escanea, el texto
+    // libre solo oculta/muestra cajas dentro de lo ya dibujado).
+    const topoBranchSelect = document.getElementById("topo-branch-select");
+    const topoSiteSelect = document.getElementById("topo-site-select");
+    const topoGridFilter = document.getElementById("topo-grid-filter");
+    if (topoBranchSelect) {
+        loadTopologyBranches();
+        topoBranchSelect.addEventListener("change", () => loadTopologySites(topoBranchSelect.value));
+    }
+    if (topoSiteSelect) {
+        topoSiteSelect.addEventListener("change", () => {
+            if (topoSiteSelect.value && topoSiteInput) topoSiteInput.value = topoSiteSelect.value;
+        });
+    }
+    if (topoGridFilter) {
+        topoGridFilter.addEventListener("input", () => filterTopologyGrid(topoGridFilter.value));
+    }
+
+    // Validación FTTH: búsqueda por Site + OLT + Caja
+    const btnFtthSearch = document.getElementById("btn-ftth-search");
+    const ftthBoxInput = document.getElementById("ftth-box-input");
+    if (btnFtthSearch) {
+        btnFtthSearch.addEventListener("click", searchFtthByBox);
+    }
+    if (ftthBoxInput) {
+        ftthBoxInput.addEventListener("keydown", (e) => {
+            if (e.key === "Enter") searchFtthByBox();
+        });
+    }
+}
+
+async function loadTopologyBranches() {
+    const select = document.getElementById("topo-branch-select");
+    if (!select) return;
+    try {
+        const response = await fetch("/api/topology/branches");
+        const data = await response.json();
+        if (!data.success) return;
+        data.branches.forEach(b => {
+            const opt = document.createElement("option");
+            opt.value = b;
+            opt.textContent = b;
+            select.appendChild(opt);
+        });
+    } catch (err) {
+        console.error("Error cargando branches del Inspector de Topología:", err);
+    }
+}
+
+async function loadTopologySites(branch) {
+    const siteSelect = document.getElementById("topo-site-select");
+    if (!siteSelect) return;
+    siteSelect.innerHTML = '<option value="">Site: Todos</option>';
+    if (!branch) return;
+    try {
+        const response = await fetch(`/api/topology/sites?branch=${encodeURIComponent(branch)}`);
+        const data = await response.json();
+        if (!data.success) return;
+        data.sites.forEach(s => {
+            const opt = document.createElement("option");
+            opt.value = s;
+            opt.textContent = s;
+            siteSelect.appendChild(opt);
+        });
+    } catch (err) {
+        console.error("Error cargando sites del branch seleccionado:", err);
+    }
+}
+
+// Filtra en vivo (sin nueva consulta al backend) las cajas ya dibujadas por
+// buildTopologyGridHtml: por código de caja o por cualquier cliente dentro de ella.
+function filterTopologyGrid(query) {
+    const grid = document.getElementById("topo-scan-grid");
+    if (!grid) return;
+    const q = query.trim().toLowerCase();
+    grid.querySelectorAll("span[onclick^='toggleTopoBoxClients']").forEach(span => {
+        if (!q) {
+            span.style.display = "";
+            return;
+        }
+        const boxIdMatch = span.getAttribute("onclick").match(/toggleTopoBoxClients\('([^']+)'\)/);
+        const boxId = boxIdMatch ? boxIdMatch[1] : null;
+        const clients = boxId ? (window.topoBoxClients[boxId] || []) : [];
+        const haystack = [
+            span.textContent,
+            ...clients.map(c => `${c.account} ${c.customer_name}`)
+        ].join(" ").toLowerCase();
+        span.style.display = haystack.includes(q) ? "" : "none";
+    });
+}
+
+async function searchFtthByBox() {
+    const site = document.getElementById("ftth-site-input")?.value.trim();
+    const olt = document.getElementById("ftth-olt-select")?.value;
+    const box = document.getElementById("ftth-box-input")?.value.trim();
+    const loading = document.getElementById("ftth-loading");
+    const resultContainer = document.getElementById("ftth-result");
+    const tbody = document.getElementById("ftth-table-body");
+    const summary = document.getElementById("ftth-result-summary");
+    if (!site || !box) {
+        alert("Ingresa Site y Caja.");
+        return;
+    }
+
+    loading.style.display = "block";
+    resultContainer.style.display = "none";
+
+    try {
+        const response = await fetch(`/api/ftth/search_by_box?site=${encodeURIComponent(site)}&olt=${encodeURIComponent(olt)}&box=${encodeURIComponent(box)}`);
+        const data = await response.json();
+        loading.style.display = "none";
+        resultContainer.style.display = "block";
+
+        if (!data.success) {
+            tbody.innerHTML = `<tr><td colspan="13" class="text-center text-danger">Error: ${data.error}</td></tr>`;
+            summary.textContent = "";
+            return;
+        }
+        if (data.count === 0) {
+            tbody.innerHTML = '<tr><td colspan="13" class="text-center">Sin clientes para ese Site/OLT/Caja.</td></tr>';
+            summary.textContent = "";
+            return;
+        }
+
+        const statusPill = (s) => {
+            if (s === "Activo") return '<span class="badge green">Activo</span>';
+            if (s === "Suspendido") return '<span class="badge orange">Suspendido</span>';
+            return `<span class="badge" style="background:rgba(91,101,119,0.15); color:#5B6577;">${s}</span>`;
+        };
+        const onlinePill = (o) => {
+            if (o === "Sí") return '<span class="badge green">Sí</span>';
+            if (o === "No") return '<span class="badge red">No</span>';
+            return '<span class="badge" style="background:rgba(91,101,119,0.15); color:#5B6577;">Desconocido</span>';
+        };
+
+        summary.textContent = `${data.count} cliente(s) encontrado(s).`;
+        tbody.innerHTML = data.clients.map(c => `
+            <tr>
+                <td>${c.account}</td>
+                <td>${statusPill(c.status)}</td>
+                <td>${onlinePill(c.online)}</td>
+                <td>${c.department}</td>
+                <td>${c.device}</td>
+                <td>${c.port_device}</td>
+                <td>${c.port_logic}</td>
+                <td style="font-family:monospace;">${c.box_code}</td>
+                <td>${c.connector_code}</td>
+                <td>${c.port_splitter}</td>
+                <td style="font-family:monospace;">${c.ont_serial}</td>
+                <td>${c.connection_date}</td>
+                <td>${c.suspend_date}</td>
+            </tr>
+        `).join("");
+    } catch (err) {
+        loading.style.display = "none";
+        resultContainer.style.display = "block";
+        tbody.innerHTML = `<tr><td colspan="13" class="text-center text-danger">Error de conexión: ${err}</td></tr>`;
     }
 }
 
@@ -1450,16 +1616,21 @@ function buildTopologyGridHtml(data) {
     data.hbs.forEach(hb => {
         html += `<h4 style="margin-top:16px; color:#5B6577;">${hb.hb_code}</h4>`;
         hb.lineas.forEach(linea => {
-            [linea.cajas, linea.exps].forEach(grupo => {
+            [[linea.cajas, false], [linea.exps, true]].forEach(([grupo, esExpansion]) => {
                 if (grupo.length === 0) return;
                 html += `<div style="display:flex; flex-wrap:wrap; gap:4px; margin-bottom:4px;">`;
                 grupo.forEach(b => {
                     const color = colorMap[b.color] || "#5B6577";
                     const boxId = `topo-box-${b.box_code}-${Math.floor(Math.random() * 1000000)}`;
                     window.topoBoxClients[boxId] = b.clients || [];
+                    // Las cajas EX (expansión) se distinguen visualmente de SB/EB -borde
+                    // punteado + etiqueta "EXP"- para que una expansión activa no se pierda
+                    // entre el resto de cajas (reporte de usuario: no veía EX424 en el grid).
+                    const borderStyle = esExpansion ? `2px dashed ${color}` : `1px solid ${color}`;
+                    const tag = esExpansion ? `<span style="font-size:9px; opacity:0.7; margin-right:3px;">EXP</span>` : "";
                     html += `
-                        <span onclick="toggleTopoBoxClients('${boxId}')" style="cursor:pointer; display:inline-block; min-width: 22ch; padding:3px 6px; border-radius:4px; background: rgba(15, 23, 42, 0.03); border:1px solid ${color}; color:${color}; font-family: monospace; font-size:12px;" title="Act:${b.act} On:${b.online} Off:${b.not_online} Unk:${b.unknown} NuncaOn:${b.nunca_online} - click para ver clientes">
-                            ${b.box_code} (${b.pct}%) |Act:${b.act}|On:${b.online}|Off:${b.not_online}|
+                        <span onclick="toggleTopoBoxClients('${boxId}')" style="cursor:pointer; display:inline-block; min-width: 22ch; padding:3px 6px; border-radius:4px; background: rgba(15, 23, 42, 0.03); border:${borderStyle}; color:${color}; font-family: monospace; font-size:12px;" title="Act:${b.act} On:${b.online} Off:${b.not_online} Unk:${b.unknown} NuncaOn:${b.nunca_online} - click para ver clientes">
+                            ${tag}${b.box_code} (${b.pct}%) |Act:${b.act}|On:${b.online}|Off:${b.not_online}|
                         </span>
                         <div id="${boxId}" style="display:none; width:100%; margin: 2px 0 6px;"></div>
                     `;
@@ -2055,7 +2226,7 @@ document.addEventListener("DOMContentLoaded", () => {
             const key = tab.dataset.oltTab;
             const panel = document.getElementById(`olt-tab-${key}`);
             if (panel) panel.style.display = "block";
-            if (key === "cortes")  { _loadOltCortes(); _loadLosRanking(); }
+            if (key === "cortes")  _loadOltCortes();
             if (key === "resumen") _loadOltResumen();
             if (key === "detalle") _populateOltDetalleSelect();
         });

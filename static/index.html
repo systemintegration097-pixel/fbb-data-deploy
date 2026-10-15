@@ -49,6 +49,10 @@
                     <i class="fa-solid fa-diagram-project"></i>
                     <span>Inspector Topología</span>
                 </a>
+                <a href="#" class="nav-item" data-page="ftth" id="nav-ftth">
+                    <i class="fa-solid fa-magnifying-glass-location"></i>
+                    <span>Validación FTTH</span>
+                </a>
                 <a href="#" class="nav-item" data-page="olt" id="nav-olt">
                     <i class="fa-solid fa-tower-broadcast"></i>
                     <span>Auditoría OLT</span>
@@ -322,6 +326,49 @@
                         </table>
                     </div>
                 </div>
+
+                <!-- Ranking de Caídas (LOS): top OLT / ODN Node / Hubbox + top 10 sites -->
+                <div class="table-section card">
+                    <h2 style="font-size: 1.1rem; font-weight: 600; margin: 0 0 10px;"><i class="fa-solid fa-ranking-star" style="color: #D93025; margin-right: 8px;"></i> Ranking de Caídas (LOS)</h2>
+                    <div style="display:grid;grid-template-columns:repeat(auto-fit, minmax(220px, 1fr));gap:14px;margin-bottom:18px;">
+                        <div>
+                            <h4 style="font-size:0.85rem;font-weight:600;margin:0 0 8px;color:#5B6577;">Top OLT</h4>
+                            <table class="data-table small-table">
+                                <thead><tr><th>OLT</th><th class="text-center">LOS</th></tr></thead>
+                                <tbody id="olt-ranking-olt-body"><tr><td colspan="2" class="text-center">—</td></tr></tbody>
+                            </table>
+                        </div>
+                        <div>
+                            <h4 style="font-size:0.85rem;font-weight:600;margin:0 0 8px;color:#5B6577;">Top ODN Node</h4>
+                            <table class="data-table small-table">
+                                <thead><tr><th>ODN Node</th><th class="text-center">LOS</th></tr></thead>
+                                <tbody id="olt-ranking-odn-body"><tr><td colspan="2" class="text-center">—</td></tr></tbody>
+                            </table>
+                        </div>
+                        <div>
+                            <h4 style="font-size:0.85rem;font-weight:600;margin:0 0 8px;color:#5B6577;">Top Hubbox</h4>
+                            <table class="data-table small-table">
+                                <thead><tr><th>Hubbox</th><th class="text-center">LOS</th></tr></thead>
+                                <tbody id="olt-ranking-hubbox-body"><tr><td colspan="2" class="text-center">—</td></tr></tbody>
+                            </table>
+                        </div>
+                    </div>
+                    <div>
+                        <h4 style="font-size:0.85rem;font-weight:600;margin:0 0 8px;color:#5B6577;">Top 10 Sites por Clientes en LOS</h4>
+                        <div class="table-responsive">
+                            <table class="data-table small-table" id="olt-ranking-sites-table">
+                                <thead>
+                                    <tr>
+                                        <th>Site</th><th>Branch/Zona</th><th class="text-center">LOS</th>
+                                        <th class="text-center">Total ONT</th><th class="text-center">%</th>
+                                        <th class="text-center">LOS ≤7 días</th><th class="text-center">LOS &gt;7 días</th>
+                                    </tr>
+                                </thead>
+                                <tbody id="olt-ranking-sites-body"><tr><td colspan="7" class="text-center">—</td></tr></tbody>
+                            </table>
+                        </div>
+                    </div>
+                </div>
             </section>
 
             </div><!-- /page-dashboard -->
@@ -522,6 +569,12 @@
                             <p>Validación en vivo GPON + BRAS por Site/OLT/HUBBOX: detecta cajas caídas (clientes activos NOT ONLINE)</p>
                         </div>
                         <div class="table-filters">
+                            <select id="topo-branch-select" class="filter-select">
+                                <option value="">Branch: Todos</option>
+                            </select>
+                            <select id="topo-site-select" class="filter-select">
+                                <option value="">Site: elegir branch primero</option>
+                            </select>
                             <div class="search-box">
                                 <i class="fa-solid fa-tower-broadcast"></i>
                                 <input type="text" id="topo-site-input" placeholder="SITE (ej: CAL0056, ARE0033)">
@@ -561,6 +614,10 @@
                                 <div><strong>Sin datos:</strong> <span id="topo-scan-total-unknown" style="color:#9AA0A6;">-</span></div>
                                 <div><strong>Nunca Online:</strong> <span id="topo-scan-total-never" style="color:#AB47BC;" title="Sin BRAS asignado en TMs: nunca tuvo sesión, no es una caída">-</span></div>
                             </div>
+                            <div class="search-box mb-1" style="max-width:320px;">
+                                <i class="fa-solid fa-filter"></i>
+                                <input type="text" id="topo-grid-filter" placeholder="Filtrar caja o cliente en esta grilla...">
+                            </div>
                             <p style="font-size:12px; color:#9AA0A6;"><i class="fa-solid fa-circle-info"></i> Click en una caja para ver sus clientes.</p>
                             <div id="topo-scan-grid"></div>
                         </div>
@@ -568,6 +625,70 @@
                 </div>
             </section>
             </div><!-- /page-topology -->
+
+            <!-- ==================== PÁGINA: VALIDACIÓN FTTH ==================== -->
+            <div id="page-ftth" class="page-section">
+                <section id="ftth-section" class="table-section mt-2">
+                    <div class="table-card card">
+                        <div class="table-header">
+                            <div>
+                                <h2><i class="fa-solid fa-magnifying-glass-location"></i> Validación FTTH — Búsqueda por Caja</h2>
+                                <p>Site + OLT + Caja → clientes de esa caja con estado de cuenta, Online (EMS en vivo) y datos de NIMS/TMS</p>
+                            </div>
+                            <div class="table-filters">
+                                <div class="search-box">
+                                    <i class="fa-solid fa-tower-broadcast"></i>
+                                    <input type="text" id="ftth-site-input" placeholder="SITE (ej: LIC0101)">
+                                </div>
+                                <select id="ftth-olt-select" class="filter-select">
+                                    <option value="1">OLT 1</option>
+                                    <option value="2">OLT 2</option>
+                                </select>
+                                <div class="search-box">
+                                    <i class="fa-solid fa-box"></i>
+                                    <input type="text" id="ftth-box-input" placeholder="CAJA (ej: EX424, SB421)">
+                                </div>
+                                <button id="btn-ftth-search" class="btn-sync">
+                                    <i class="fa-solid fa-magnifying-glass"></i>
+                                    <span>Buscar</span>
+                                </button>
+                            </div>
+                        </div>
+
+                        <div id="ftth-loading" class="mt-2" style="display: none; color: #9AA0A6;">
+                            <i class="fa-solid fa-spinner fa-spin"></i> Buscando clientes y consultando estado Online en vivo...
+                        </div>
+
+                        <div id="ftth-result" class="mt-2" style="display: none;">
+                            <p style="font-size:12px; color:#9AA0A6;" id="ftth-result-summary"></p>
+                            <div class="table-responsive">
+                                <table class="data-table">
+                                    <thead>
+                                        <tr>
+                                            <th>Cuenta</th>
+                                            <th>Estado</th>
+                                            <th>Online</th>
+                                            <th>Departamento</th>
+                                            <th>Device</th>
+                                            <th>Puerto Device</th>
+                                            <th>Puerto Lógico</th>
+                                            <th>Caja (Sub node)</th>
+                                            <th>Splitter</th>
+                                            <th>N° Splitter</th>
+                                            <th>Serial ONT</th>
+                                            <th>Actualización</th>
+                                            <th>Suspendido desde</th>
+                                        </tr>
+                                    </thead>
+                                    <tbody id="ftth-table-body">
+                                        <tr><td colspan="13" class="text-center">Ingresa Site, OLT y Caja, luego presiona Buscar.</td></tr>
+                                    </tbody>
+                                </table>
+                            </div>
+                        </div>
+                    </div>
+                </section>
+            </div><!-- /page-ftth -->
 
             <!-- ==================== PÁGINA: AUDITORÍA OLT ==================== -->
             <div id="page-olt" class="page-section">
@@ -670,47 +791,6 @@
 
                 <!-- Tab: Cortes Masivos (Caídas de Línea) -->
                 <div id="olt-tab-cortes" class="olt-tab-content card" style="display:none;">
-                    <!-- Ranking de caídas (LOS): top OLT / ODN Node / Hubbox + top 10 sites -->
-                    <h3 style="font-size:1rem;font-weight:600;margin:0 0 10px;">Ranking de Caídas (LOS)</h3>
-                    <div style="display:grid;grid-template-columns:repeat(auto-fit, minmax(220px, 1fr));gap:14px;margin-bottom:18px;">
-                        <div>
-                            <h4 style="font-size:0.85rem;font-weight:600;margin:0 0 8px;color:#5B6577;">Top OLT</h4>
-                            <table class="data-table small-table">
-                                <thead><tr><th>OLT</th><th class="text-center">LOS</th></tr></thead>
-                                <tbody id="olt-ranking-olt-body"><tr><td colspan="2" class="text-center">—</td></tr></tbody>
-                            </table>
-                        </div>
-                        <div>
-                            <h4 style="font-size:0.85rem;font-weight:600;margin:0 0 8px;color:#5B6577;">Top ODN Node</h4>
-                            <table class="data-table small-table">
-                                <thead><tr><th>ODN Node</th><th class="text-center">LOS</th></tr></thead>
-                                <tbody id="olt-ranking-odn-body"><tr><td colspan="2" class="text-center">—</td></tr></tbody>
-                            </table>
-                        </div>
-                        <div>
-                            <h4 style="font-size:0.85rem;font-weight:600;margin:0 0 8px;color:#5B6577;">Top Hubbox</h4>
-                            <table class="data-table small-table">
-                                <thead><tr><th>Hubbox</th><th class="text-center">LOS</th></tr></thead>
-                                <tbody id="olt-ranking-hubbox-body"><tr><td colspan="2" class="text-center">—</td></tr></tbody>
-                            </table>
-                        </div>
-                    </div>
-                    <div style="margin-bottom:22px;">
-                        <h4 style="font-size:0.85rem;font-weight:600;margin:0 0 8px;color:#5B6577;">Top 10 Sites por Clientes en LOS</h4>
-                        <div class="table-responsive">
-                            <table class="data-table small-table" id="olt-ranking-sites-table">
-                                <thead>
-                                    <tr>
-                                        <th>Site</th><th>Branch/Zona</th><th class="text-center">LOS</th>
-                                        <th class="text-center">Total ONT</th><th class="text-center">%</th>
-                                        <th class="text-center">LOS ≤7 días</th><th class="text-center">LOS &gt;7 días</th>
-                                    </tr>
-                                </thead>
-                                <tbody id="olt-ranking-sites-body"><tr><td colspan="7" class="text-center">—</td></tr></tbody>
-                            </table>
-                        </div>
-                    </div>
-
                     <div style="display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:10px;margin-bottom:14px;">
                         <h3 style="font-size:1rem;font-weight:600;margin:0;">Caídas de Línea (Cortes Masivos Detectados) — Agrupado por OLT</h3>
                         <div style="display:flex;gap:8px;flex-wrap:wrap;">

@@ -78,13 +78,26 @@ def main():
             phone TEXT,
             status TEXT,
             connection_date TEXT,
-            address TEXT
+            address TEXT,
+            port_device TEXT,
+            port_logic TEXT,
+            port_splitter TEXT,
+            ont_serial TEXT
         )
     """)
     # Crear índices para nims_subscribers
     print("Creando índices para nims_subscribers...")
     cursor.execute("CREATE INDEX IF NOT EXISTS idx_nims_account ON nims_subscribers(account)")
     cursor.execute("CREATE INDEX IF NOT EXISTS idx_nims_connector ON nims_subscribers(connector_code)")
+
+    # Migración: agregar columnas nuevas si esta base de datos ya existía antes de
+    # que se agregaran (CREATE TABLE IF NOT EXISTS no las agrega a una tabla existente).
+    for col, col_type in [("port_device", "TEXT"), ("port_logic", "TEXT"), ("port_splitter", "TEXT"), ("ont_serial", "TEXT")]:
+        try:
+            cursor.execute(f"ALTER TABLE nims_subscribers ADD COLUMN {col} {col_type}")
+            print(f"Columna '{col}' agregada con éxito a nims_subscribers.")
+        except sqlite3.OperationalError:
+            pass
 
     # 4. Crear tabla de suscriptores TMs (radaccount)
     print("Creando tabla 'tm_subscribers'...")
