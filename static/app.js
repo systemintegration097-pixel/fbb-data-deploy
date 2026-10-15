@@ -1970,6 +1970,7 @@ document.addEventListener("DOMContentLoaded", () => {
                     const span = document.createElement("span");
                     span.textContent = `${olt.name} (${olt.ip})`;
                     span.style.fontSize = "13px";
+                    span.style.color = "var(--text-primary)";
                     
                     label.appendChild(cb);
                     label.appendChild(span);

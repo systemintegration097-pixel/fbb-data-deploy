@@ -2415,14 +2415,14 @@
             </div>
             <div class="modal-body">
                 <p style="margin-bottom:15px; color:#9AA0A6;">Selecciona las OLTs que deseas auditar. El escaneo parcial será mucho más rápido.</p>
-                <input type="text" id="olt-search-input" class="search-input" placeholder="🔍 Buscar OLT por nombre o IP..." style="width: 100%; margin-bottom: 15px; padding: 10px; border-radius: 8px; border: 1px solid #3c4043; background: #202124; color: white;">
-                
+                <input type="text" id="olt-search-input" class="search-input" placeholder="🔍 Buscar OLT por nombre o IP..." style="width: 100%; margin-bottom: 15px; padding: 10px; border-radius: 8px; border: 1px solid var(--border-color); background: var(--bg-card); color: var(--text-primary);">
+
                 <div style="display:flex; gap:10px; margin-bottom:15px;">
                     <button id="btn-olt-select-all" class="btn-action" style="font-size:12px; padding:6px 12px;">Seleccionar Todo</button>
-                    <button id="btn-olt-deselect-all" class="btn-action" style="font-size:12px; padding:6px 12px; background:transparent; border:1px solid #5f6368;">Deseleccionar Todo</button>
+                    <button id="btn-olt-deselect-all" class="btn-action" style="font-size:12px; padding:6px 12px; background:transparent; border:1px solid var(--border-color); color: var(--text-primary);">Deseleccionar Todo</button>
                 </div>
 
-                <div id="olt-checkbox-list" style="max-height: 300px; overflow-y: auto; background: #1a1b1e; padding: 10px; border-radius: 8px; border: 1px solid #3c4043; display: grid; grid-template-columns: 1fr 1fr; gap: 10px;">
+                <div id="olt-checkbox-list" style="max-height: 300px; overflow-y: auto; background: var(--bg-main); padding: 10px; border-radius: 8px; border: 1px solid var(--border-color); display: grid; grid-template-columns: 1fr 1fr; gap: 10px;">
                     <!-- Checkboxes de OLTs se inyectarán aquí -->
                 </div>
             </div>
