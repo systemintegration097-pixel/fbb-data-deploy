@@ -1939,14 +1939,21 @@ def olt_full_detail():
                 ticket_row = cursor.fetchone()
 
             diag = onu.get("Tipo_Falla") or "—"
+            # Sin fila en tm_subscribers = la cuenta ya no está en "Account on AAA" (la vista
+            # de TMS que se descarga) -confirmado en vivo: cuando se cancela una línea, TMS la
+            # saca por completo de ahí, no queda ningún registro (ver conversación del caso
+            # murilloers1). La OLT sigue "recordando" la ONU físicamente, por eso igual aparece
+            # acá, pero no hay cuenta/teléfono/BRAS que mostrar -se rotula explícito en vez de
+            # dejar un guión ambiguo.
+            account_label = account if account else "Cancelado"
             result_rows.append({
-                "account": account or "—",
+                "account": account_label,
                 "bras": tm_row["bras"] if tm_row else "—",
                 "diagnosis": diag,
                 "ip_mac": tm_row["mac"] if (tm_row and tm_row["mac"]) else "—",
                 "port": f"{olt_name}/{onu.get('PON')}/{onu.get('ONU_ID')}",
                 "branch_zone": f"{branch} / {nims_row['site_name']}" if (nims_row and nims_row["site_name"]) else (branch or "—"),
-                "tms_status": _format_tms_status(tm_row["status"] if tm_row else None),
+                "tms_status": _format_tms_status(tm_row["status"]) if tm_row else "Cancelado",
                 "ems_status": onu.get("Estado") or "—",
                 "last_off_time": onu.get("FECHA_CAIDA") or "—",
                 "power": _format_power(onu.get("Power")),

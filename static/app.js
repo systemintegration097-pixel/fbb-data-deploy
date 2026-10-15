@@ -2002,6 +2002,11 @@ document.addEventListener("DOMContentLoaded", () => {
     document.getElementById("olt-cortes-filter-branch")?.addEventListener("change", _renderOltCortes);
     document.getElementById("olt-cortes-filter-tipo")?.addEventListener("change", _renderOltCortes);
     document.getElementById("btn-olt-detalle-consultar")?.addEventListener("click", _loadOltFullDetail);
+    document.getElementById("olt-detalle-input")?.addEventListener("keydown", (e) => {
+        if (e.key === "Enter") _loadOltFullDetail();
+    });
+    document.getElementById("olt-detalle-filter-text")?.addEventListener("input", _filterOltDetalleRows);
+    document.getElementById("olt-detalle-filter-diag")?.addEventListener("change", _filterOltDetalleRows);
 
     // ── Página Despliegues Pendientes ──────────────────────────
     document.getElementById("nav-deploy-pending")?.addEventListener("click", _loadDeployPending);
@@ -2522,22 +2527,20 @@ async function _loadLosRanking() {
 }
 
 // ── Detalle por OLT: cuenta, BRAS, diagnóstico, potencia, ticket por ONU ──────
-let _oltDetalleSelectLoaded = false;
+let _oltDetalleListLoaded = false;
+let _oltDetalleKnownNames = new Set();
+let _oltDetalleAllRows = []; // última respuesta cargada, para filtrar sin re-consultar la OLT
 
 async function _populateOltDetalleSelect() {
-    if (_oltDetalleSelectLoaded) return;
-    const sel = document.getElementById("olt-detalle-select");
-    if (!sel) return;
+    if (_oltDetalleListLoaded) return;
+    const datalist = document.getElementById("olt-detalle-datalist");
+    if (!datalist) return;
     try {
         const r = await fetch("/api/olt/list");
         const olts = await r.json();
-        olts.forEach(o => {
-            const opt = document.createElement("option");
-            opt.value = o.name;
-            opt.textContent = `${o.name} (${o.ip})`;
-            sel.appendChild(opt);
-        });
-        _oltDetalleSelectLoaded = true;
+        datalist.innerHTML = olts.map(o => `<option value="${o.name}">${o.name} (${o.ip})</option>`).join("");
+        _oltDetalleKnownNames = new Set(olts.map(o => o.name));
+        _oltDetalleListLoaded = true;
     } catch (e) {
         console.error("Error cargando lista de OLTs:", e);
     }
@@ -2550,30 +2553,13 @@ function _diagnosisBadgeClass(diag) {
     return "color:#5B6577;";
 }
 
-async function _loadOltFullDetail() {
-    const sel = document.getElementById("olt-detalle-select");
-    const statusEl = document.getElementById("olt-detalle-status");
-    const table = document.getElementById("olt-detalle-table");
+function _renderOltDetalleRows(rows) {
     const tbody = document.getElementById("olt-detalle-body");
-    const oltName = sel?.value;
-    if (!oltName) {
-        statusEl.textContent = "Selecciona una OLT primero.";
-        return;
-    }
-    table.style.display = "none";
-    statusEl.innerHTML = `<i class="fa-solid fa-spinner fa-spin"></i> Consultando ${oltName} en vivo (estado + potencia óptica de cada ONU, puede tardar un momento)...`;
-    try {
-        const r = await fetch(`/api/olt/full_detail?olt_name=${encodeURIComponent(oltName)}`);
-        const data = await r.json();
-        if (data.error && (!data.rows || !data.rows.length)) {
-            statusEl.innerHTML = `<i class="fa-solid fa-triangle-exclamation" style="color:#D93025;"></i> ${data.error}`;
-            return;
-        }
-        if (!data.rows.length) {
-            statusEl.textContent = "Sin ONUs encontradas para esta OLT.";
-            return;
-        }
-        tbody.innerHTML = data.rows.map(row => `<tr>
+    const countEl = document.getElementById("olt-detalle-filter-count");
+    if (!rows.length) {
+        tbody.innerHTML = '<tr><td colspan="12" class="text-center" style="color:#9AA0A6;">Sin resultados para el filtro actual.</td></tr>';
+    } else {
+        tbody.innerHTML = rows.map(row => `<tr>
             <td>${row.account}</td>
             <td style="font-family:monospace;font-size:11px;">${row.bras}</td>
             <td style="${_diagnosisBadgeClass(row.diagnosis)}">${row.diagnosis}</td>
@@ -2587,7 +2573,58 @@ async function _loadOltFullDetail() {
             <td>${row.phone}</td>
             <td style="font-size:11px;">${row.ticket}</td>
         </tr>`).join("");
+    }
+    if (countEl) countEl.textContent = `${rows.length} de ${_oltDetalleAllRows.length} ONU(s)`;
+}
+
+function _filterOltDetalleRows() {
+    const text = (document.getElementById("olt-detalle-filter-text")?.value || "").trim().toLowerCase();
+    const diag = document.getElementById("olt-detalle-filter-diag")?.value || "";
+    const filtered = _oltDetalleAllRows.filter(row => {
+        if (diag && row.diagnosis !== diag) return false;
+        if (!text) return true;
+        return [row.account, row.port, row.phone, row.ticket].some(v => (v || "").toLowerCase().includes(text));
+    });
+    _renderOltDetalleRows(filtered);
+}
+
+async function _loadOltFullDetail() {
+    const input = document.getElementById("olt-detalle-input");
+    const statusEl = document.getElementById("olt-detalle-status");
+    const table = document.getElementById("olt-detalle-table");
+    const filtersWrap = document.getElementById("olt-detalle-filters");
+    const oltName = (input?.value || "").trim();
+    if (!oltName) {
+        statusEl.textContent = "Escribe el nombre de una OLT primero.";
+        return;
+    }
+    // El input es texto libre (datalist solo sugiere) -si lo que escribió no coincide con
+    // ninguna OLT real conocida, se avisa antes de gastar una consulta en vivo que de
+    // seguro va a fallar.
+    if (_oltDetalleKnownNames.size && !_oltDetalleKnownNames.has(oltName)) {
+        statusEl.innerHTML = `<i class="fa-solid fa-triangle-exclamation" style="color:#D93025;"></i> "${oltName}" no coincide con ninguna OLT conocida. Elige una opción de la lista sugerida.`;
+        return;
+    }
+    table.style.display = "none";
+    filtersWrap.style.display = "none";
+    statusEl.innerHTML = `<i class="fa-solid fa-spinner fa-spin"></i> Consultando ${oltName} en vivo (estado + potencia óptica de cada ONU, puede tardar un momento)...`;
+    try {
+        const r = await fetch(`/api/olt/full_detail?olt_name=${encodeURIComponent(oltName)}`);
+        const data = await r.json();
+        if (data.error && (!data.rows || !data.rows.length)) {
+            statusEl.innerHTML = `<i class="fa-solid fa-triangle-exclamation" style="color:#D93025;"></i> ${data.error}`;
+            return;
+        }
+        if (!data.rows.length) {
+            statusEl.textContent = "Sin ONUs encontradas para esta OLT.";
+            return;
+        }
+        _oltDetalleAllRows = data.rows;
+        document.getElementById("olt-detalle-filter-text").value = "";
+        document.getElementById("olt-detalle-filter-diag").value = "";
+        _renderOltDetalleRows(_oltDetalleAllRows);
         table.style.display = "";
+        filtersWrap.style.display = "flex";
         statusEl.textContent = `${data.rows.length} ONU(s) encontradas en ${oltName}.`;
     } catch (e) {
         statusEl.innerHTML = `<i class="fa-solid fa-triangle-exclamation" style="color:#D93025;"></i> Error: ${e.message}`;

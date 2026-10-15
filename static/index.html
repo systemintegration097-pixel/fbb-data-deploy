@@ -737,13 +737,28 @@
                     <div style="display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:10px;margin-bottom:14px;">
                         <h3 style="font-size:1rem;font-weight:600;margin:0;">Detalle de ONUs por OLT (consulta en vivo al EMS, incluye potencia óptica)</h3>
                         <div style="display:flex;gap:8px;flex-wrap:wrap;align-items:center;">
-                            <select id="olt-detalle-select" class="filter-select-sm" style="min-width:220px;">
-                                <option value="">Selecciona una OLT...</option>
-                            </select>
+                            <input id="olt-detalle-input" type="text" class="filter-input-sm" list="olt-detalle-datalist" placeholder="Escribe el nombre de la OLT..." autocomplete="off" style="min-width:240px;">
+                            <datalist id="olt-detalle-datalist"></datalist>
                             <button id="btn-olt-detalle-consultar" class="btn-sm-blue"><i class="fa-solid fa-magnifying-glass"></i> Consultar</button>
                         </div>
                     </div>
-                    <p id="olt-detalle-status" style="color:#9AA0A6;font-size:13px;">Elige una OLT y presiona "Consultar" — puede tardar unos segundos (se consulta cada ONU en vivo, incluida su potencia óptica).</p>
+                    <p id="olt-detalle-status" style="color:#9AA0A6;font-size:13px;">Escribe el nombre de una OLT y presiona "Consultar" — puede tardar unos segundos (se consulta cada ONU en vivo, incluida su potencia óptica).</p>
+
+                    <!-- Filtros de la tabla de resultados (solo filtran lo ya cargado, no vuelven a consultar la OLT) -->
+                    <div id="olt-detalle-filters" style="display:none;gap:8px;flex-wrap:wrap;margin:10px 0;">
+                        <input id="olt-detalle-filter-text" type="text" class="filter-input-sm" placeholder="Filtrar por cuenta, puerto, teléfono o ticket..." style="min-width:260px;flex:1;">
+                        <select id="olt-detalle-filter-diag" class="filter-select-sm">
+                            <option value="">Todos los diagnósticos</option>
+                            <option value="OK">OK</option>
+                            <option value="LOS">LOS</option>
+                            <option value="OPTICA">OPTICA</option>
+                            <option value="ENERGIA">ENERGIA</option>
+                            <option value="INACTIVO_PROBABLE">INACTIVO_PROBABLE</option>
+                            <option value="ERROR">ERROR</option>
+                        </select>
+                        <span id="olt-detalle-filter-count" style="font-size:12px;color:#9AA0A6;align-self:center;"></span>
+                    </div>
+
                     <div class="table-responsive">
                         <table class="data-table small-table" id="olt-detalle-table" style="display:none;">
                             <thead>
