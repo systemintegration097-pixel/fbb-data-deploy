@@ -319,6 +319,25 @@ async def query_pon_async(session, sem_global, sem_olt,
 # ─────────────────────────────────────────────────────────────────────────────
 #  DETECCIÓN DE CORTES
 # ─────────────────────────────────────────────────────────────────────────────
+def _promote_mass_faults_to_activo(records: list) -> list:
+    """Si 2+ ONUs del mismo tipo de falla caen en el mismo puerto PON, se marcan como
+    es_activo=True sin importar cuántos días lleven caídas (clasificar() las habría
+    marcado es_activo=False por superar INACTIVO_DIAS=60, pensado para filtrar clientes
+    aislados abandonados). Un corte que afecta a todo un puerto no es un cliente
+    abandonado, aunque nadie lo haya resuelto en mucho tiempo -confirmado con el usuario
+    2026-10-15 para LIC0486OLT01, donde varios puertos con 6-10 ONUs caídas desde hace
+    77 días quedaban invisibles en Cortes/Alarmas/Resumen por este único motivo."""
+    grupos = defaultdict(list)
+    for r in records:
+        if r.get('Tipo_Falla') in ('LOS', 'ENERGIA', 'OPTICA'):
+            grupos[(r['OLT'], r['PON'], r['Tipo_Falla'])].append(r)
+    for grupo in grupos.values():
+        if len(grupo) >= 2:
+            for r in grupo:
+                r['es_activo'] = True
+    return records
+
+
 def detect_cortes(all_records: list) -> tuple:
     cortes = []
     grupos = defaultdict(list)
@@ -426,6 +445,7 @@ def init_db():
         );
         CREATE INDEX IF NOT EXISTS ix_cortes_ts ON cortes(olt_name, ts_detectado);
         CREATE INDEX IF NOT EXISTS ix_cortes   ON cortes(olt_name, pon);
+        CREATE INDEX IF NOT EXISTS ix_cortes_incidente ON cortes(olt_name, pon, tipo_corte, hora_corte);
         CREATE INDEX IF NOT EXISTS ix_latest_olt ON escaneos_latest(olt_name);
         CREATE INDEX IF NOT EXISTS ix_latest_olt_pon ON escaneos_latest(olt_name, pon);
         CREATE INDEX IF NOT EXISTS ix_latest_activo ON escaneos_latest(es_activo, tipo_falla);
@@ -642,6 +662,7 @@ def run_audit(olts_input_path: str, selected_olts: list = None):
             print(f"[OLT Audit] Reintento final: {n_resueltos}/{len(failed)} puertos se resolvieron.", flush=True)
 
         _set_status(message='Detectando cortes masivos...')
+        all_records = _promote_mass_faults_to_activo(all_records)
         all_records, cortes = detect_cortes(all_records)
 
         _set_status(message='Guardando en base de datos...')
@@ -1054,6 +1075,7 @@ def get_olt_port_status_live(olt_name: str, pon_port_num, onu_id: str = None) ->
         conn.close()
         return None
 
+    records = _promote_mass_faults_to_activo(records)
     ts_scan = datetime.now().strftime('%Y-%m-%d %H:%M:%S')
     rows_e = [
         (ts_scan, r['OLT'], r['IP'], r['PON'], r['ONU_ID'], r['SN'],
@@ -1270,5 +1292,87 @@ def get_los_ranking_raw(top_n: int = 10) -> dict:
         "total_by_olt": {r['olt_name']: r['total'] for r in totals},
         "top_olt": top_olt,
     }
+
+
+# ─────────────────────────────────────────────────────────────────────────────
+#  HISTORIAL DE CAÍDAS POR PUERTO — reemplaza al escaneo en vivo de cajas del
+#  Inspector de Topología (ese escaneo en vivo sigue existiendo para el modal de
+#  detalle de alarma, ver _execute_topology_scan más arriba -esto es independiente).
+# ─────────────────────────────────────────────────────────────────────────────
+def get_los_history_ranking_raw() -> list:
+    """Ranking de puertos (OLT+PON) por cantidad de INCIDENTES DE CORTE DISTINTOS
+    (no filas crudas: un corte que sigue activo se re-inserta en 'cortes' en cada
+    ciclo del loop 24/7 con el mismo hora_corte, así que agrupar por
+    (olt_name,pon,tipo_corte,hora_corte) es lo que identifica un incidente real -
+    contar filas crudas sobrestimaría por miles un corte de semanas sin resolver)."""
+    conn = get_olt_db_connection()
+    try:
+        rows = conn.execute("""
+            WITH incidentes AS (
+                SELECT olt_name, olt_ip, pon, tipo_corte, hora_corte,
+                       MAX(onus_afectadas) AS onus_afectadas,
+                       MAX(ts_detectado) AS ultima_vez,
+                       MIN(ts_detectado) AS primera_vez
+                FROM cortes
+                GROUP BY olt_name, pon, tipo_corte, hora_corte
+            )
+            SELECT olt_name, olt_ip, pon, tipo_corte, COUNT(*) AS n,
+                   SUM(onus_afectadas) AS total_onus,
+                   MAX(ultima_vez) AS ultima_vez,
+                   MIN(primera_vez) AS primera_vez
+            FROM incidentes
+            GROUP BY olt_name, pon, tipo_corte
+        """).fetchall()
+    finally:
+        conn.close()
+
+    por_puerto = {}
+    for r in rows:
+        key = (r['olt_name'], r['pon'])
+        entry = por_puerto.setdefault(key, {
+            "olt_name": r['olt_name'], "olt_ip": r['olt_ip'], "pon": r['pon'],
+            "n_incidentes": 0, "total_onus_afectados": 0,
+            "ultima_vez": r['ultima_vez'], "primera_vez": r['primera_vez'],
+            "_por_tipo": {},
+        })
+        entry["n_incidentes"] += r['n']
+        entry["total_onus_afectados"] += r['total_onus'] or 0
+        entry["ultima_vez"] = max(entry["ultima_vez"], r['ultima_vez'])
+        entry["primera_vez"] = min(entry["primera_vez"], r['primera_vez'])
+        entry["_por_tipo"][r['tipo_corte']] = r['n']
+
+    result = []
+    for entry in por_puerto.values():
+        tipo_predominante = max(entry["_por_tipo"], key=entry["_por_tipo"].get)
+        del entry["_por_tipo"]
+        entry["tipo_predominante"] = tipo_predominante
+        result.append(entry)
+
+    result.sort(key=lambda x: x["n_incidentes"], reverse=True)
+    return result
+
+
+def get_los_history_detail_raw(olt_name: str, pon: str) -> list:
+    """Incidentes distintos de UN puerto específico, más recientes primero, con los
+    onus_ids de la detección más reciente de cada incidente (para resolver clientes
+    afectados en server.py)."""
+    conn = get_olt_db_connection()
+    try:
+        rows = conn.execute("""
+            SELECT olt_name, pon, tipo_corte, hora_corte, onus_afectadas, onus_ids, causa, ts_detectado
+            FROM (
+                SELECT *, ROW_NUMBER() OVER (
+                    PARTITION BY olt_name, pon, tipo_corte, hora_corte
+                    ORDER BY ts_detectado DESC
+                ) AS rn
+                FROM cortes
+                WHERE olt_name = ? AND pon = ?
+            )
+            WHERE rn = 1
+            ORDER BY hora_corte DESC
+        """, (olt_name, pon)).fetchall()
+    finally:
+        conn.close()
+    return [dict(r) for r in rows]
 
 

@@ -520,38 +520,31 @@ function setupEventListeners() {
         });
     }
 
-    // Inspector Topología: escaneo en vivo GPON + BRAS
-    const btnTopoScan = document.getElementById("btn-topo-scan");
-    const topoSiteInput = document.getElementById("topo-site-input");
-    if (btnTopoScan) {
-        btnTopoScan.addEventListener("click", scanTopologyLive);
-    }
-    if (topoSiteInput) {
-        topoSiteInput.addEventListener("keydown", (e) => {
-            if (e.key === "Enter") {
-                scanTopologyLive();
-            }
-        });
-    }
-
-    // Desglosables en cascada Branch -> Site, y filtro de texto libre sobre la grilla
-    // ya dibujada (los 3 trabajan juntos: branch/site deciden QUÉ se escanea, el texto
-    // libre solo oculta/muestra cajas dentro de lo ya dibujado).
+    // Historial de Caídas por Puerto (reemplaza el viejo escaneo en vivo de cajas)
     const topoBranchSelect = document.getElementById("topo-branch-select");
-    const topoSiteSelect = document.getElementById("topo-site-select");
-    const topoGridFilter = document.getElementById("topo-grid-filter");
+    const losHistoryFilter = document.getElementById("los-history-filter");
+    const btnLosHistoryRefresh = document.getElementById("btn-los-history-refresh");
     if (topoBranchSelect) {
         loadTopologyBranches();
-        topoBranchSelect.addEventListener("change", () => loadTopologySites(topoBranchSelect.value));
+        topoBranchSelect.addEventListener("change", () => loadLosHistory(topoBranchSelect.value));
+        loadLosHistory("");
     }
-    if (topoSiteSelect) {
-        topoSiteSelect.addEventListener("change", () => {
-            if (topoSiteSelect.value && topoSiteInput) topoSiteInput.value = topoSiteSelect.value;
-        });
+    if (losHistoryFilter) {
+        losHistoryFilter.addEventListener("input", () => filterLosHistoryTable(losHistoryFilter.value));
     }
-    if (topoGridFilter) {
-        topoGridFilter.addEventListener("input", () => filterTopologyGrid(topoGridFilter.value));
+    if (btnLosHistoryRefresh) {
+        btnLosHistoryRefresh.addEventListener("click", () => loadLosHistory(topoBranchSelect?.value || ""));
     }
+
+    // Cerrar modal de detalle del historial de caídas
+    const closeLosHistoryModal = () => {
+        document.getElementById("los-history-detail-modal")?.classList.remove("active");
+    };
+    document.getElementById("los-history-detail-close")?.addEventListener("click", closeLosHistoryModal);
+    const losHistoryModal = document.getElementById("los-history-detail-modal");
+    window.addEventListener("click", (e) => {
+        if (e.target === losHistoryModal) closeLosHistoryModal();
+    });
 
     // Validación FTTH: búsqueda por Site + OLT + Caja
     const btnFtthSearch = document.getElementById("btn-ftth-search");
@@ -584,47 +577,102 @@ async function loadTopologyBranches() {
     }
 }
 
-async function loadTopologySites(branch) {
-    const siteSelect = document.getElementById("topo-site-select");
-    if (!siteSelect) return;
-    siteSelect.innerHTML = '<option value="">Site: Todos</option>';
-    if (!branch) return;
+let _losHistoryAllRows = [];
+
+async function loadLosHistory(branch) {
+    const tbody = document.getElementById("los-history-body");
+    const loading = document.getElementById("los-history-loading");
+    if (!tbody) return;
+    loading.style.display = "block";
+    tbody.innerHTML = '<tr><td colspan="7" class="text-center">Cargando...</td></tr>';
     try {
-        const response = await fetch(`/api/topology/sites?branch=${encodeURIComponent(branch)}`);
+        const url = branch ? `/api/topology/los_history?branch=${encodeURIComponent(branch)}` : "/api/topology/los_history";
+        const response = await fetch(url);
         const data = await response.json();
-        if (!data.success) return;
-        data.sites.forEach(s => {
-            const opt = document.createElement("option");
-            opt.value = s;
-            opt.textContent = s;
-            siteSelect.appendChild(opt);
-        });
+        loading.style.display = "none";
+        if (!data.success) {
+            tbody.innerHTML = `<tr><td colspan="7" class="text-center text-danger">Error cargando el historial.</td></tr>`;
+            return;
+        }
+        _losHistoryAllRows = data.ports;
+        const filterInput = document.getElementById("los-history-filter");
+        if (filterInput) filterInput.value = "";
+        renderLosHistoryTable(_losHistoryAllRows);
     } catch (err) {
-        console.error("Error cargando sites del branch seleccionado:", err);
+        loading.style.display = "none";
+        tbody.innerHTML = `<tr><td colspan="7" class="text-center text-danger">Error de conexión: ${err}</td></tr>`;
     }
 }
 
-// Filtra en vivo (sin nueva consulta al backend) las cajas ya dibujadas por
-// buildTopologyGridHtml: por código de caja o por cualquier cliente dentro de ella.
-function filterTopologyGrid(query) {
-    const grid = document.getElementById("topo-scan-grid");
-    if (!grid) return;
+function renderLosHistoryTable(rows) {
+    const tbody = document.getElementById("los-history-body");
+    if (!rows.length) {
+        tbody.innerHTML = '<tr><td colspan="7" class="text-center">Sin incidentes registrados para este filtro.</td></tr>';
+        return;
+    }
+    tbody.innerHTML = rows.map(r => `
+        <tr class="clickable-row" style="cursor:pointer;" onclick="openLosHistoryDetail('${r.olt_name}', '${r.pon}')">
+            <td>${r.olt_name}</td>
+            <td style="font-family:monospace;">${r.pon}</td>
+            <td>${r.branch}</td>
+            <td class="text-center" style="color:#D93025;font-weight:600;">${r.n_incidentes}</td>
+            <td class="text-center">${r.total_onus_afectados}</td>
+            <td style="font-size:11px;">${r.ultima_vez}</td>
+            <td>${r.tipo_predominante === 'CORTE-ENERGIA' ? 'Energía' : 'LOS (óptica)'}</td>
+        </tr>
+    `).join("");
+}
+
+// Filtra en vivo (sin nueva consulta al backend) la tabla ya cargada, por OLT o puerto.
+function filterLosHistoryTable(query) {
     const q = query.trim().toLowerCase();
-    grid.querySelectorAll("span[onclick^='toggleTopoBoxClients']").forEach(span => {
-        if (!q) {
-            span.style.display = "";
+    if (!q) {
+        renderLosHistoryTable(_losHistoryAllRows);
+        return;
+    }
+    const filtered = _losHistoryAllRows.filter(r =>
+        r.olt_name.toLowerCase().includes(q) || r.pon.toLowerCase().includes(q)
+    );
+    renderLosHistoryTable(filtered);
+}
+
+window.openLosHistoryDetail = async function(oltName, pon) {
+    const modal = document.getElementById("los-history-detail-modal");
+    const loading = document.getElementById("los-history-detail-loading");
+    const table = document.getElementById("los-history-detail-table");
+    const tbody = document.getElementById("los-history-detail-body");
+    if (!modal) return;
+
+    document.getElementById("los-history-detail-title").textContent = `${oltName} — Puerto ${pon}`;
+    loading.style.display = "block";
+    table.style.display = "none";
+    tbody.innerHTML = "";
+    modal.classList.add("active");
+
+    try {
+        const response = await fetch(`/api/topology/los_history/detail?olt_name=${encodeURIComponent(oltName)}&pon=${encodeURIComponent(pon)}`);
+        const data = await response.json();
+        loading.style.display = "none";
+        if (!data.success || !data.incidentes.length) {
+            tbody.innerHTML = '<tr><td colspan="4" class="text-center">Sin incidentes.</td></tr>';
+            table.style.display = "";
             return;
         }
-        const boxIdMatch = span.getAttribute("onclick").match(/toggleTopoBoxClients\('([^']+)'\)/);
-        const boxId = boxIdMatch ? boxIdMatch[1] : null;
-        const clients = boxId ? (window.topoBoxClients[boxId] || []) : [];
-        const haystack = [
-            span.textContent,
-            ...clients.map(c => `${c.account} ${c.customer_name}`)
-        ].join(" ").toLowerCase();
-        span.style.display = haystack.includes(q) ? "" : "none";
-    });
-}
+        tbody.innerHTML = data.incidentes.map(inc => `
+            <tr>
+                <td style="font-size:11px;">${inc.hora_corte}</td>
+                <td>${inc.tipo_corte === 'CORTE-ENERGIA' ? 'Energía' : 'LOS (óptica)'}</td>
+                <td class="text-center">${inc.onus_afectadas}</td>
+                <td style="font-size:11px;">${inc.clientes.join(", ")}</td>
+            </tr>
+        `).join("");
+        table.style.display = "";
+    } catch (err) {
+        loading.style.display = "none";
+        tbody.innerHTML = `<tr><td colspan="4" class="text-center text-danger">Error: ${err}</td></tr>`;
+        table.style.display = "";
+    }
+};
 
 async function searchFtthByBox() {
     const site = document.getElementById("ftth-site-input")?.value.trim();
@@ -1499,116 +1547,15 @@ function fetchNimsReport() {
         });
 }
 
-let topoScanInterval = null;
-
-function scanTopologyLive() {
-    const siteInput = document.getElementById("topo-site-input");
-    if (!siteInput || !siteInput.value.trim()) return;
-
-    const site = siteInput.value.trim();
-    const olt = document.getElementById("topo-olt-select").value;
-    const hubbox = document.getElementById("topo-hubbox-select").value;
-
-    const loading = document.getElementById("topo-scan-loading");
-    const resultContainer = document.getElementById("topo-scan-result");
-    const alarmBanner = document.getElementById("topo-alarm-banner");
-    const btn = document.getElementById("btn-topo-scan");
-
-    loading.style.display = "block";
-    resultContainer.style.display = "none";
-    alarmBanner.style.display = "none";
-    if (btn) btn.disabled = true;
-    if (topoScanInterval) clearInterval(topoScanInterval);
-
-    // El escaneo corre en un hilo de fondo en el servidor (puede tardar varios minutos);
-    // se arranca con un POST y luego se hace polling del estado, en vez de mantener una
-    // sola petición abierta por minutos (eso causaba "NetworkError" al cortarse la conexión).
-    fetch(`/api/topology/scan/start?site=${encodeURIComponent(site)}&olt=${encodeURIComponent(olt)}&hubbox=${encodeURIComponent(hubbox)}`, { method: "POST" })
-        .then(res => res.json())
-        .then(data => {
-            if (!data.success) {
-                loading.style.display = "none";
-                if (btn) btn.disabled = false;
-                resultContainer.style.display = "block";
-                document.getElementById("topo-scan-grid").innerHTML = `<span class="text-danger">Error: ${data.error}</span>`;
-                return;
-            }
-            pollTopologyScanStatus();
-        })
-        .catch(err => {
-            loading.style.display = "none";
-            if (btn) btn.disabled = false;
-            resultContainer.style.display = "block";
-            document.getElementById("topo-scan-grid").innerHTML = `<span class="text-danger">Error de conexión: ${err}</span>`;
-        });
-}
-
-function pollTopologyScanStatus() {
-    const loading = document.getElementById("topo-scan-loading");
-    const resultContainer = document.getElementById("topo-scan-result");
-    const btn = document.getElementById("btn-topo-scan");
-
-    topoScanInterval = setInterval(async () => {
-        try {
-            const response = await fetch("/api/topology/scan/status");
-            const status = await response.json();
-
-            if (status.state === "running") {
-                if (status.total > 0) {
-                    loading.innerHTML = `<i class="fa-solid fa-spinner fa-spin"></i> Consultando BRAS en vivo... (${status.checked}/${status.total} cuentas)`;
-                }
-            } else if (status.state === "done") {
-                clearInterval(topoScanInterval);
-                loading.style.display = "none";
-                if (btn) btn.disabled = false;
-                renderTopologyResult(status.result);
-            } else if (status.state === "error") {
-                clearInterval(topoScanInterval);
-                loading.style.display = "none";
-                if (btn) btn.disabled = false;
-                resultContainer.style.display = "block";
-                document.getElementById("topo-scan-grid").innerHTML = `<span class="text-danger">Error: ${status.error}</span>`;
-            }
-        } catch (err) {
-            // Error de red puntual en un poll: se reintenta en el próximo tick, no se corta el intervalo.
-            console.error("Error consultando estado del escaneo de topología:", err);
-        }
-    }, 2000);
-}
-
 // Mapa box_code -> lista de clientes del último escaneo, para el click-to-expand.
 window.topoBoxClients = {};
 
-function renderTopologyResult(data) {
-    const resultContainer = document.getElementById("topo-scan-result");
-    const alarmBanner = document.getElementById("topo-alarm-banner");
-    resultContainer.style.display = "block";
-
-    document.getElementById("topo-scan-title").textContent = `SITE ${data.site} | OLT ${data.olt} | ${data.xb_code}`;
-    document.getElementById("topo-scan-branch").textContent = data.branch || "Sin identificar";
-    document.getElementById("topo-scan-total-act").textContent = data.totals.act;
-    document.getElementById("topo-scan-total-online").textContent = data.totals.online;
-    document.getElementById("topo-scan-total-offline").textContent = data.totals.not_online;
-    document.getElementById("topo-scan-total-unknown").textContent = data.totals.unknown;
-    document.getElementById("topo-scan-total-never").textContent = data.totals.nunca_online;
-
-    if (data.alarm.boxes_down_count > 0) {
-        alarmBanner.style.display = "block";
-        alarmBanner.innerHTML = `
-            <div class="card p-1-5" style="background: rgba(234,67,53,0.12); border: 1px solid #EA4335;">
-                <strong style="color:#D93025;"><i class="fa-solid fa-triangle-exclamation"></i> ALARMA: ${data.alarm.boxes_down_count} caja(s) caída(s) en este site</strong>
-                <div style="margin-top:6px; font-family: monospace;">${data.alarm.boxes_down.join(", ")}</div>
-            </div>
-        `;
-    } else {
-        alarmBanner.style.display = "none";
-    }
-
-    document.getElementById("topo-scan-grid").innerHTML = buildTopologyGridHtml(data);
-}
-
-// Construye el HTML de la grilla de cajas (reutilizado por la vista principal del
-// Inspector Topología y por el modal de detalle de alarma).
+// Construye el HTML de la grilla de cajas -usado por el modal de detalle de alarma
+// (openAlarmDetail), que dispara un escaneo en vivo de la OLT completa al hacer click
+// en una alarma de "Alarmas de Red". El Inspector de Topología ya no tiene su propia
+// vista de grid (reemplazada por el Historial de Caídas por Puerto), pero esta función
+// y el escaneo en vivo que la alimenta (/api/topology/scan/*, _execute_topology_scan en
+// server.py) siguen en uso para ese modal.
 function buildTopologyGridHtml(data) {
     const colorMap = { red: "#D93025", orange: "#B04C00", green: "#0B7A44", blue: "#0F58BD", grey: "#5B6577" };
     window.topoBoxClients = window.topoBoxClients || {};
@@ -2826,6 +2773,7 @@ async function _loadOltFullDetail() {
     const statusEl = document.getElementById("olt-detalle-status");
     const table = document.getElementById("olt-detalle-table");
     const filtersWrap = document.getElementById("olt-detalle-filters");
+    const summaryEl = document.getElementById("olt-detalle-summary");
     const oltName = (input?.value || "").trim();
     if (!oltName) {
         statusEl.textContent = "Escribe el nombre de una OLT primero.";
@@ -2840,6 +2788,7 @@ async function _loadOltFullDetail() {
     }
     table.style.display = "none";
     filtersWrap.style.display = "none";
+    summaryEl.style.display = "none";
     statusEl.innerHTML = `<i class="fa-solid fa-spinner fa-spin"></i> Consultando ${oltName} en vivo (estado + potencia óptica de cada ONU, puede tardar un momento)...`;
     try {
         const r = await fetch(`/api/olt/full_detail?olt_name=${encodeURIComponent(oltName)}`);
@@ -2858,6 +2807,19 @@ async function _loadOltFullDetail() {
         _renderOltDetalleRows(_oltDetalleAllRows);
         table.style.display = "";
         filtersWrap.style.display = "flex";
+        if (data.summary) {
+            const s = data.summary;
+            document.getElementById("sum-branch").textContent = s.branch;
+            document.getElementById("sum-total").textContent = s.total_onus;
+            document.getElementById("sum-activos").textContent = s.activos;
+            document.getElementById("sum-suspendidos").textContent = s.suspendidos;
+            document.getElementById("sum-cancelados").textContent = s.cancelados;
+            document.getElementById("sum-pot-ok").textContent = s.potencia_ok;
+            document.getElementById("sum-pot-nok").textContent = s.potencia_nok;
+            document.getElementById("sum-servicio-ok").textContent = s.servicio_ok;
+            document.getElementById("sum-los").textContent = s.los_dying_gasp;
+            summaryEl.style.display = "flex";
+        }
         statusEl.textContent = `${data.rows.length} ONU(s) encontradas en ${oltName}.`;
     } catch (e) {
         statusEl.innerHTML = `<i class="fa-solid fa-triangle-exclamation" style="color:#D93025;"></i> Error: ${e.message}`;

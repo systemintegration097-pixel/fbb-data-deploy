@@ -561,69 +561,51 @@
                 </div>
             </section>
 
-            <section id="topology-section" class="table-section mt-2">
+            <section id="los-history-section" class="table-section mt-2">
                 <div class="table-card card">
                     <div class="table-header">
                         <div>
-                            <h2><i class="fa-solid fa-diagram-project"></i> Inspector de Topología de Red</h2>
-                            <p>Validación en vivo GPON + BRAS por Site/OLT/HUBBOX: detecta cajas caídas (clientes activos NOT ONLINE)</p>
+                            <h2><i class="fa-solid fa-clock-rotate-left"></i> Historial de Caídas por Puerto</h2>
+                            <p>Ranking de OLT+Puerto por cantidad de incidentes de corte distintos (últimos 30 días) — identifica líneas con problemas recurrentes para investigar</p>
                         </div>
                         <div class="table-filters">
                             <select id="topo-branch-select" class="filter-select">
                                 <option value="">Branch: Todos</option>
                             </select>
-                            <select id="topo-site-select" class="filter-select">
-                                <option value="">Site: elegir branch primero</option>
-                            </select>
                             <div class="search-box">
-                                <i class="fa-solid fa-tower-broadcast"></i>
-                                <input type="text" id="topo-site-input" placeholder="SITE (ej: CAL0056, ARE0033)">
+                                <i class="fa-solid fa-magnifying-glass"></i>
+                                <input type="text" id="los-history-filter" placeholder="Filtrar por OLT o puerto...">
                             </div>
-                            <select id="topo-olt-select" class="filter-select">
-                                <option value="1">OLT 1</option>
-                                <option value="2">OLT 2</option>
-                            </select>
-                            <select id="topo-hubbox-select" class="filter-select">
-                                <option value="Todas">HUBBOX: Todas</option>
-                                <option value="HB01">HB01</option>
-                                <option value="HB02">HB02</option>
-                                <option value="HB03">HB03</option>
-                                <option value="HB04">HB04</option>
-                            </select>
-                            <button id="btn-topo-scan" class="btn-sync">
-                                <i class="fa-solid fa-satellite-dish"></i>
-                                <span>Validar y Dibujar Topología</span>
+                            <button id="btn-los-history-refresh" class="btn-sync">
+                                <i class="fa-solid fa-rotate"></i>
+                                <span>Refrescar</span>
                             </button>
                         </div>
                     </div>
 
-                    <div id="topo-scan-loading" class="mt-2" style="display: none; color: #9AA0A6;">
-                        <i class="fa-solid fa-spinner fa-spin"></i> Consultando BRAS en vivo para cada abonado activo (solo 2 consultas en paralelo para no saturar BRAS: un site completo puede tardar varios minutos; filtra por un HUBBOX específico para una respuesta más rápida)...
+                    <div id="los-history-loading" class="mt-2" style="display: none; color: #9AA0A6;">
+                        <i class="fa-solid fa-spinner fa-spin"></i> Calculando historial (agrupa 30 días de detecciones, puede tardar unos segundos)...
                     </div>
 
-                    <div id="topo-scan-result" class="mt-2" style="display: none;">
-                        <div id="topo-alarm-banner" class="mb-2" style="display: none;"></div>
-
-                        <div class="topology-card card p-2 bg-dark-card">
-                            <h3 class="text-accent mb-1"><i class="fa-solid fa-route"></i> <span id="topo-scan-title">-</span></h3>
-                            <div class="info-grid mb-2">
-                                <div><strong>Branch:</strong> <span id="topo-scan-branch">-</span></div>
-                                <div><strong>Total abonados activos:</strong> <span id="topo-scan-total-act">-</span></div>
-                                <div><strong>Online:</strong> <span id="topo-scan-total-online" style="color:#34A853;">-</span></div>
-                                <div><strong>Not Online:</strong> <span id="topo-scan-total-offline" style="color:#EA4335;">-</span></div>
-                                <div><strong>Sin datos:</strong> <span id="topo-scan-total-unknown" style="color:#9AA0A6;">-</span></div>
-                                <div><strong>Nunca Online:</strong> <span id="topo-scan-total-never" style="color:#AB47BC;" title="Sin BRAS asignado en TMs: nunca tuvo sesión, no es una caída">-</span></div>
-                            </div>
-                            <div class="search-box mb-1" style="max-width:320px;">
-                                <i class="fa-solid fa-filter"></i>
-                                <input type="text" id="topo-grid-filter" placeholder="Filtrar caja o cliente en esta grilla...">
-                            </div>
-                            <p style="font-size:12px; color:#9AA0A6;"><i class="fa-solid fa-circle-info"></i> Click en una caja para ver sus clientes.</p>
-                            <div id="topo-scan-grid"></div>
-                        </div>
+                    <p style="font-size:12px; color:#9AA0A6;"><i class="fa-solid fa-circle-info"></i> Click en una fila para ver cada incidente (fecha, # ONUs, clientes afectados).</p>
+                    <div class="table-responsive">
+                        <table class="data-table small-table" id="los-history-table">
+                            <thead>
+                                <tr>
+                                    <th>OLT</th><th>Puerto</th><th>Branch</th>
+                                    <th class="text-center">N° Incidentes</th>
+                                    <th class="text-center">Total ONUs afectados</th>
+                                    <th>Última vez</th><th>Tipo predominante</th>
+                                </tr>
+                            </thead>
+                            <tbody id="los-history-body">
+                                <tr><td colspan="7" class="text-center">Cargando historial...</td></tr>
+                            </tbody>
+                        </table>
                     </div>
                 </div>
             </section>
+
             </div><!-- /page-topology -->
 
             <!-- ==================== PÁGINA: VALIDACIÓN FTTH ==================== -->
@@ -853,6 +835,19 @@
                         </div>
                     </div>
                     <p id="olt-detalle-status" style="color:#9AA0A6;font-size:13px;">Escribe el nombre de una OLT y presiona "Consultar" — puede tardar unos segundos (se consulta cada ONU en vivo, incluida su potencia óptica).</p>
+
+                    <!-- Resumen agregado de la consulta (oculto hasta la primera consulta) -->
+                    <div id="olt-detalle-summary" style="display:none;flex-wrap:wrap;gap:10px;margin:10px 0;padding:10px 14px;background:rgba(15,23,42,0.03);border-radius:6px;font-size:12px;">
+                        <span><strong>Branch:</strong> <span id="sum-branch">-</span></span>
+                        <span><strong>Total ONUs:</strong> <span id="sum-total">-</span></span>
+                        <span style="color:#0B7A44;"><strong>Activos:</strong> <span id="sum-activos">-</span></span>
+                        <span style="color:#B04C00;"><strong>Suspendidos:</strong> <span id="sum-suspendidos">-</span></span>
+                        <span style="color:#5B6577;"><strong>Cancelados:</strong> <span id="sum-cancelados">-</span></span>
+                        <span style="color:#0B7A44;"><strong>Potencia OK (&gt;-25):</strong> <span id="sum-pot-ok">-</span></span>
+                        <span style="color:#D93025;"><strong>Potencia NOK (&le;-25):</strong> <span id="sum-pot-nok">-</span></span>
+                        <span style="color:#0B7A44;"><strong>Servicio OK:</strong> <span id="sum-servicio-ok">-</span></span>
+                        <span style="color:#D93025;"><strong>LOS/Dying Gasp:</strong> <span id="sum-los">-</span></span>
+                    </div>
 
                     <!-- Filtros de la tabla de resultados (solo filtran lo ya cargado, no vuelven a consultar la OLT) -->
                     <div id="olt-detalle-filters" style="display:none;gap:8px;flex-wrap:wrap;margin:10px 0;">
@@ -2863,6 +2858,28 @@
                     <i class="fa-solid fa-spinner fa-spin"></i> Escaneando toda la OLT en vivo (puede tardar varios minutos)...
                 </div>
                 <div id="alarm-modal-grid"></div>
+            </div>
+        </div>
+    </div>
+
+    <div id="los-history-detail-modal" class="modal">
+        <div class="modal-content card" style="max-width: 720px; width: 95%;">
+            <div class="modal-header">
+                <h2 style="font-size: 1.1rem; font-weight: bold;"><i class="fa-solid fa-clock-rotate-left"></i> <span id="los-history-detail-title">-</span></h2>
+                <button class="btn-close" id="los-history-detail-close">&times;</button>
+            </div>
+            <div class="modal-body" style="padding-top: 10px;">
+                <div id="los-history-detail-loading" style="color:#9AA0A6;">
+                    <i class="fa-solid fa-spinner fa-spin"></i> Cargando incidentes...
+                </div>
+                <div class="table-responsive">
+                    <table class="data-table small-table" id="los-history-detail-table" style="display:none;">
+                        <thead>
+                            <tr><th>Fecha inicio</th><th>Tipo</th><th class="text-center"># ONUs</th><th>Clientes afectados</th></tr>
+                        </thead>
+                        <tbody id="los-history-detail-body"></tbody>
+                    </table>
+                </div>
             </div>
         </div>
     </div>

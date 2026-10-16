@@ -1777,6 +1777,69 @@ def topology_sites():
     return jsonify({"success": True, "sites": sites})
 
 
+@app.route("/api/topology/los_history")
+def topology_los_history():
+    """Reemplaza el viejo escaneo en vivo de cajas del Inspector de Topología: ranking
+    de puertos (OLT+PON) por cantidad de incidentes de corte distintos detectados en
+    los últimos 30 días (retención de la tabla 'cortes'), para identificar líneas con
+    problemas recurrentes en vez de solo el estado del momento."""
+    branch_filter = request.args.get("branch", "").strip()
+    rows = olt_audit.get_los_history_ranking_raw()
+
+    conn = get_db_connection()
+    cursor = conn.cursor()
+    zonas_map = _load_zonas_map(cursor)
+    conn.close()
+
+    result = []
+    for r in rows:
+        branch = zonas_map.get(_olt_site_code(r["olt_name"]), "")
+        if branch_filter and branch != branch_filter:
+            continue
+        result.append({**r, "branch": branch or "—"})
+
+    return jsonify({"success": True, "ports": result})
+
+
+@app.route("/api/topology/los_history/detail")
+def topology_los_history_detail():
+    """Incidentes distintos de un puerto específico, con los clientes afectados en la
+    detección más reciente de cada uno. Nota: resuelve con el abonado ACTUAL de ese
+    ONU_ID (vía tm_subscribers), no necesariamente quién estaba ahí en el momento
+    histórico del corte -no existe un registro histórico de esa asociación."""
+    olt_name = request.args.get("olt_name", "").strip()
+    pon = request.args.get("pon", "").strip()
+    if not olt_name or not pon:
+        return jsonify({"success": False, "error": "Parámetros olt_name y pon requeridos."}), 400
+
+    incidentes = olt_audit.get_los_history_detail_raw(olt_name, pon)
+
+    conn = get_db_connection()
+    cursor = conn.cursor()
+    try:
+        cursor.execute(
+            "SELECT username, port FROM tm_subscribers WHERE port LIKE ?",
+            (f"{olt_name}/%",)
+        )
+        account_by_onu = {}
+        for r in cursor.fetchall():
+            parts = (r["port"] or "").split("/")
+            if len(parts) < 4:
+                continue
+            if parts[-2] != pon.split("-")[-1]:
+                continue
+            onu_id = parts[-1].split(":")[0]
+            account_by_onu[onu_id] = r["username"]
+    finally:
+        conn.close()
+
+    for inc in incidentes:
+        ids = [x.strip() for x in (inc.get("onus_ids") or "").split(",") if x.strip()]
+        inc["clientes"] = [account_by_onu.get(i, f"ONU {i} (sin cuenta activa)") for i in ids]
+
+    return jsonify({"success": True, "olt_name": olt_name, "pon": pon, "incidentes": incidentes})
+
+
 @app.route("/api/olt/cortes")
 def olt_cortes():
     rows = olt_audit.get_cortes()
@@ -2036,6 +2099,18 @@ def olt_full_detail():
             onu_id = parts[-1].split(":")[0]
             tm_by_key[(pon_num, onu_id)] = r
 
+        # Fallback para cuentas que ya no están en TMS (canceladas: TMS las borra por
+        # completo, ver nota más abajo) -nims_subscribers.ont_serial coincide con el SN
+        # que entrega el EMS y SÍ conserva cuenta/nombre de líneas canceladas. Confirmado
+        # en vivo 2026-10-16 contra el EMS que esta cuenta (ossbitel) no tiene permiso
+        # para ninguna operación SOAP de WAN/PPPoE (LST-ONUWANINFO y similares -> "No
+        # Permission"), así que este cruce por serial es la única fuente disponible.
+        cursor.execute("""
+            SELECT account, customer_name, status, ont_serial FROM nims_subscribers
+            WHERE site_name = ? AND ont_serial IS NOT NULL AND ont_serial != ''
+        """, (olt_name,))
+        nims_by_serial = {(r["ont_serial"] or "").strip().upper(): r for r in cursor.fetchall()}
+
         branch = _load_zonas_map(cursor).get(_olt_site_code(olt_name), "")
 
         result_rows = []
@@ -2045,11 +2120,18 @@ def olt_full_detail():
             tm_row = tm_by_key.get(key)
 
             account = tm_row["username"] if tm_row else None
+            account_source = "tms" if account else None
+            if not account:
+                fallback = nims_by_serial.get((onu.get("SN") or "").strip().upper())
+                if fallback:
+                    account = fallback["account"]
+                    account_source = "nims"
+
             nims_row = None
             ticket_row = None
             if account:
                 cursor.execute("""
-                    SELECT customer_name, phone, address, box_code, connector_code, site_name
+                    SELECT customer_name, phone, address, box_code, connector_code, site_name, status
                     FROM nims_subscribers WHERE account = ? COLLATE NOCASE LIMIT 1
                 """, (account,))
                 nims_row = cursor.fetchone()
@@ -2065,9 +2147,22 @@ def olt_full_detail():
             # de TMS que se descarga) -confirmado en vivo: cuando se cancela una línea, TMS la
             # saca por completo de ahí, no queda ningún registro (ver conversación del caso
             # murilloers1). La OLT sigue "recordando" la ONU físicamente, por eso igual aparece
-            # acá, pero no hay cuenta/teléfono/BRAS que mostrar -se rotula explícito en vez de
-            # dejar un guión ambiguo.
-            account_label = account if account else "Cancelado"
+            # acá. Si no se encontró ni en TMS ni en NIMS por serial, no hay dato real que
+            # mostrar -se rotula "Sin registro" en vez de asumir "Cancelado" sin evidencia.
+            if tm_row:
+                tms_status_label = _format_tms_status(tm_row["status"])
+            elif nims_row:
+                tms_status_label = nims_row["status"] or "Sin registro"
+            else:
+                tms_status_label = "Sin registro"
+            account_label = account if account else "Sin registro"
+            power_info = onu.get("Power") or {}
+            # rx_power viene como string del XML del EMS (ej. "-20.451"), no como número
+            # -hay que convertirlo para poder comparar contra el umbral de -25 dBm.
+            try:
+                rx_power = float(power_info.get("rx_power"))
+            except (TypeError, ValueError):
+                rx_power = None
             result_rows.append({
                 "account": account_label,
                 "bras": tm_row["bras"] if tm_row else "—",
@@ -2075,15 +2170,29 @@ def olt_full_detail():
                 "ip_mac": tm_row["mac"] if (tm_row and tm_row["mac"]) else "—",
                 "port": f"{olt_name}/{onu.get('PON')}/{onu.get('ONU_ID')}",
                 "branch_zone": f"{branch} / {nims_row['site_name']}" if (nims_row and nims_row["site_name"]) else (branch or "—"),
-                "tms_status": _format_tms_status(tm_row["status"]) if tm_row else "Cancelado",
+                "tms_status": tms_status_label,
                 "ems_status": onu.get("Estado") or "—",
                 "last_off_time": onu.get("FECHA_CAIDA") or "—",
-                "power": _format_power(onu.get("Power")),
+                "power": _format_power(power_info),
+                "rx_power": rx_power,
                 "phone": (nims_row["phone"] if nims_row else None) or "—",
                 "ticket": (ticket_row["ticket_code"] if ticket_row else None) or "—",
             })
 
-        return jsonify({"olt_name": olt_name, "rows": result_rows})
+        summary = {
+            "total_onus": len(result_rows),
+            "branch": branch or "—",
+            "activos": sum(1 for r in result_rows if r["tms_status"] == "Activo"),
+            "suspendidos": sum(1 for r in result_rows if r["tms_status"] == "Suspendido"),
+            "cancelados": sum(1 for r in result_rows if r["tms_status"] == "Cancelado"),
+            "potencia_ok": sum(1 for r in result_rows if r["rx_power"] is not None and r["rx_power"] > -25),
+            "potencia_nok": sum(1 for r in result_rows if r["rx_power"] is not None and r["rx_power"] <= -25),
+            "sin_potencia": sum(1 for r in result_rows if r["rx_power"] is None),
+            "servicio_ok": sum(1 for r in result_rows if r["diagnosis"] == "OK"),
+            "los_dying_gasp": sum(1 for r in result_rows if r["diagnosis"] in ("LOS", "OPTICA", "ENERGIA")),
+        }
+
+        return jsonify({"olt_name": olt_name, "rows": result_rows, "summary": summary})
     finally:
         conn.close()
 
